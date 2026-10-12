@@ -84,34 +84,125 @@ async function enterApp(me){
   if(me.locked){applyLock(true,true);$("privacyStatus").textContent="Diary terkunci. Masukkan PIN lewat tombol Unlock diary.";}
   else{applyLock(false,true);await loadData();}
 }
-let authMode="login";
-function setAuthMode(m){
-  authMode=m;
-  $("tabLogin").classList.toggle("active",m==="login");$("tabRegister").classList.toggle("active",m==="register");
-  $("nameField").classList.toggle("hidden",m!=="register");
-  $("authTitle").textContent=m==="login"?"Masuk":"Buat akun";
-  $("authSubmit").textContent=m==="login"?"Masuk":"Daftar & mulai";
-  $("authPass").autocomplete=m==="login"?"current-password":"new-password";
-  $("authMsg").textContent="";
+
+/* ---------- LOGIN & REGISTER ---------- */
+
+let authMode = "login";
+
+function setAuthMode(mode) {
+  authMode = mode;
+
+  $("tabLogin").classList.toggle("active", mode === "login");
+  $("tabRegister").classList.toggle("active", mode === "register");
+
+  $("nameField").classList.toggle("hidden", mode !== "register");
+
+  $("authTitle").textContent =
+    mode === "login" ? "Masuk" : "Buat akun";
+
+  $("authSubmit").textContent =
+    mode === "login" ? "Masuk" : "Daftar & mulai";
+
+  $("authPass").autocomplete =
+    mode === "login" ? "current-password" : "new-password";
+
+  $("authUser").autocomplete =
+    mode === "login" ? "username" : "username";
+
+  $("authMsg").textContent = "";
+
+  $("authPass").setCustomValidity("");
 }
-$("tabLogin").addEventListener("click",()=>setAuthMode("login"));
-$("tabRegister").addEventListener("click",()=>setAuthMode("register"));
-$("authForm").addEventListener("submit",async e=>{
-  e.preventDefault();$("authMsg").textContent="";$("authSubmit").disabled=true;
-  try{
-    const body={username:$("authUser").value,password:$("authPass").value};
-    if(authMode==="register")body.name=$("authName").value;
-    const me=await api("POST",authMode==="login"?"/api/login":"/api/register",body);
-    $("authPass").value="";
-    await enterApp(me);
-  }catch(err){$("authMsg").textContent=err.message;}
-  finally{$("authSubmit").disabled=false;}
+
+$("tabLogin").addEventListener("click", () => {
+  setAuthMode("login");
 });
-$("logoutBtn").addEventListener("click",async()=>{
-  try{await fetch("/api/logout",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-Requested-With":"mld"},body:"{}"});}catch{}
-  $("authUser").value="";$("authName").value="";
-  showAuth("Kamu sudah keluar dengan aman. Sampai jumpa!");
+
+$("tabRegister").addEventListener("click", () => {
+  setAuthMode("register");
 });
+
+$("authForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const username = $("authUser").value.trim().toLowerCase();
+  const password = $("authPass").value;
+  const name = $("authName").value.trim();
+
+  $("authMsg").textContent = "";
+
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+    $("authMsg").textContent =
+      "Username harus 3–30 karakter dan hanya boleh berisi huruf kecil, angka, titik, strip, atau garis bawah.";
+    $("authUser").focus();
+    return;
+  }
+
+  if (password.length < 8 || password.length > 128) {
+    $("authMsg").textContent =
+      "Password harus terdiri dari 8–128 karakter.";
+    $("authPass").focus();
+    return;
+  }
+
+  if (authMode === "register" && name.length > 40) {
+    $("authMsg").textContent =
+      "Nama panggilan maksimal 40 karakter.";
+    $("authName").focus();
+    return;
+  }
+
+  const submitButton = $("authSubmit");
+  submitButton.disabled = true;
+
+  const originalText =
+    authMode === "login" ? "Masuk" : "Daftar & mulai";
+
+  submitButton.textContent =
+    authMode === "login" ? "Memeriksa akun..." : "Membuat akun...";
+
+  try {
+    const payload = { username, password };
+
+    if (authMode === "register") {
+      payload.name = name;
+    }
+
+    const endpoint =
+      authMode === "login" ? "/api/login" : "/api/register";
+
+    const response = await api("POST", endpoint, payload);
+
+    $("authPass").value = "";
+
+    await enterApp(response);
+  } catch (error) {
+    $("authMsg").textContent =
+      error?.message || "Terjadi kesalahan. Silakan coba lagi.";
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = originalText;
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  const button = $("logoutBtn");
+  button.disabled = true;
+
+  try {
+    await api("POST", "/api/logout", {});
+  } catch (error) {
+    // Tetap bersihkan tampilan lokal jika sesi sudah berakhir.
+  } finally {
+    $("authUser").value = "";
+    $("authPass").value = "";
+    $("authName").value = "";
+
+    showAuth("Kamu sudah keluar. Sampai jumpa lagi! ♡");
+    button.disabled = false;
+  }
+});
+
 function askSecret(title,hint){
   return new Promise(resolve=>{
     $("pinTitle").textContent=title;$("pinHint").textContent=hint;$("pinInput").value="";
