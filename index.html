@@ -345,19 +345,22 @@ footer{text-align:center;padding:15px 15px 75px;font-size:12px;opacity:.75}
         <input id="authName" maxlength="40" autocomplete="nickname" placeholder="Nama panggilanmu">
       </div>
 
-      <div class="field">
-        <label for="authUser">Email</label>
-        <input
-          id="authUser"
-          type="email"
-          required
-          maxlength="254"
-          autocomplete="email"
-          placeholder="nama@email.com"
-          autocapitalize="none"
-          spellcheck="false"
-        >
-      </div>
+      
+<div class="field">
+  <label for="authUser">Username</label>
+  <input
+    id="authUser"
+    type="text"
+    required
+    minlength="3"
+    maxlength="30"
+    autocomplete="username"
+    autocapitalize="none"
+    spellcheck="false"
+    placeholder="Masukkan username"
+  >
+</div>
+
 
       <div class="field">
         <label for="authPass">Password</label>
@@ -601,6 +604,6 @@ footer{text-align:center;padding:15px 15px 75px;font-size:12px;opacity:.75}
 <button type="button" class="fab" id="musicFab" aria-pressed="false">♪ Musik Off</button>
 
 <!-- Jalur relatif agar bekerja pada root dan project pages GitHub Pages -->
-<script type="module" src="./app.js"></script>
+<script type="module" src="./app.js" defer></script>
 </body>
 </html>
