@@ -181,6 +181,146 @@ $("authForm").addEventListener("submit", async (event) => {
       error?.message || "Terjadi kesalahan. Silakan coba lagi.";
   } finally {
     submitButton.disabled = false;
+// ========================================
+// SUPABASE AUTHENTICATION
+// ========================================
+
+// Isi dengan data dari Supabase Dashboard
+const SUPABASE_URL = "https://seidxxrzxjjjhrafscga.supabase.co/rest/v1/";
+const SUPABASE_ANON_KEY = "Msb_publishable_4YajoLeQeqNMs9zwkXvxQA_fPMfVnfm";
+
+// Memerlukan Supabase JS v2 yang dimuat di HTML
+// Sebelum app.js:
+// <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+let authMode = "login";
+
+function setAuthMode(mode) {
+  authMode = mode;
+
+  $("tabLogin").classList.toggle("active", mode === "login");
+  $("tabRegister").classList.toggle("active", mode === "register");
+
+  $("nameField").classList.toggle("hidden", mode !== "register");
+
+  $("authTitle").textContent =
+    mode === "login" ? "Masuk" : "Buat akun";
+
+  $("authSubmit").textContent =
+    mode === "login" ? "Masuk" : "Daftar & mulai";
+
+  $("authPass").autocomplete =
+    mode === "login" ? "current-password" : "new-password";
+
+  $("authEmail").autocomplete = "email";
+
+  $("authMsg").textContent = "";
+  $("authPass").setCustomValidity("");
+}
+
+$("tabLogin").addEventListener("click", () => {
+  setAuthMode("login");
+});
+
+$("tabRegister").addEventListener("click", () => {
+  setAuthMode("register");
+});
+
+$("authForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const email = $("authEmail").value.trim().toLowerCase();
+  const password = $("authPass").value;
+  const name = $("authName").value.trim();
+
+  $("authMsg").textContent = "";
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    $("authMsg").textContent = "Masukkan alamat email yang valid.";
+    $("authEmail").focus();
+    return;
+  }
+
+  if (password.length < 8 || password.length > 128) {
+    $("authMsg").textContent =
+      "Password harus terdiri dari 8–128 karakter.";
+    $("authPass").focus();
+    return;
+  }
+
+  if (authMode === "register" && name.length > 40) {
+    $("authMsg").textContent =
+      "Nama panggilan maksimal 40 karakter.";
+    $("authName").focus();
+    return;
+  }
+
+  const submitButton = $("authSubmit");
+  const originalText =
+    authMode === "login" ? "Masuk" : "Daftar & mulai";
+
+  submitButton.disabled = true;
+  submitButton.textContent =
+    authMode === "login" ? "Memeriksa akun..." : "Membuat akun...";
+
+  try {
+    if (authMode === "register") {
+      const { data, error } =
+        await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo:
+              "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
+            data: {
+              display_name: name
+            }
+          }
+        });
+
+      if (error) throw error;
+
+      $("authPass").value = "";
+
+      if (data.user && !data.session) {
+        $("authMsg").textContent =
+          "Pendaftaran berhasil. Periksa email kamu dan klik tautan verifikasi sebelum masuk.";
+        return;
+      }
+
+      if (data.session) {
+        $("authMsg").textContent =
+          "Akun berhasil dibuat dan kamu sudah masuk.";
+        await enterApp(data);
+      }
+
+    } else {
+      const { data, error } =
+        await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+      if (error) throw error;
+
+      $("authPass").value = "";
+      await enterApp(data);
+    }
+
+  } catch (error) {
+    console.error("Authentication error:", error);
+
+    $("authMsg").textContent =
+      error?.message ||
+      "Terjadi kesalahan. Silakan coba lagi.";
+
+  } finally {
+    submitButton.disabled = false;
     submitButton.textContent = originalText;
   }
 });
@@ -190,11 +330,18 @@ $("logoutBtn").addEventListener("click", async () => {
   button.disabled = true;
 
   try {
-    await api("POST", "/api/logout", {});
+    const { error } = await supabaseClient.auth.signOut();
+
+    if (error) throw error;
+
   } catch (error) {
-    // Tetap bersihkan tampilan lokal jika sesi sudah berakhir.
+    console.error("Logout error:", error);
+    $("authMsg").textContent =
+      error?.message || "Gagal keluar. Silakan coba lagi.";
+
   } finally {
     $("authUser").value = "";
+    $("authEmail").value = "";
     $("authPass").value = "";
     $("authName").value = "";
 
@@ -203,15 +350,55 @@ $("logoutBtn").addEventListener("click", async () => {
   }
 });
 
-function askSecret(title,hint){
-  return new Promise(resolve=>{
-    $("pinTitle").textContent=title;$("pinHint").textContent=hint;$("pinInput").value="";
-    $("pinPop").classList.add("show");$("pinInput").focus();
-    const done=v=>{$("pinPop").classList.remove("show");$("pinInput").value="";resolve(v);};
-    $("pinForm").onsubmit=e=>{e.preventDefault();done($("pinInput").value);};
-    $("pinCancel").onclick=()=>done(null);
-  });
+// Memulihkan sesi login saat halaman dibuka kembali
+async function restoreSupabaseSession() {
+  try {
+    const { data, error } =
+      await supabaseClient.auth.getSession();
+
+    if (error) throw error;
+
+    if (data.session) {
+      await enterApp({
+        user: data.session.user,
+        session: data.session
+      });
+    }
+  } catch (error) {
+    console.error("Session restore error:", error);
+  }
 }
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_OUT") {
+    showAuth("Silakan masuk kembali ke diary kamu.");
+  }
+});
+
+// Pertahankan fungsi PIN milik aplikasi
+function askSecret(title, hint) {
+  return new Promise(resolve => {
+    $("pinTitle").textContent = title;
+    $("pinHint").textContent = hint;
+    $("pinInput").value = "";
+
+    $("pinPop").classList.add("show");
+    $("pinInput").focus();
+
+    const done = value => {
+      $("pinPop").classList.remove("show");
+      $("pinInput").value = "";
+      resolve(value);
+    };
+
+    $("pinForm").onsubmit = event => {
+      event.preventDefault();
+      done($("pinInput").value);
+    };
+
+    $("pinCancel").onclick = () => done(null);
+  });
+             }
 
 /* ---------- NAVIGASI: satu halaman per menu ---------- */
 function go(id){
