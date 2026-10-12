@@ -18,7 +18,7 @@ const crypto = require("node:crypto");
 
 /* ---------------------------- Konfigurasi ---------------------------- */
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
