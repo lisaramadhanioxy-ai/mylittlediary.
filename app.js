@@ -38,7 +38,13 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null, pinHash = null, diaryLocked = false;
 
 class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-const fail = error => { if (error) throw new ApiError(500, error.message || "Terjadi kesalahan."); };
+const fail = error => {
+  if (!error) return;
+  const m = String(error.message || "");
+  if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table|does not exist/i.test(m))
+    throw new ApiError(500, "Tabel database belum dibuat. Jalankan supabase-setup.sql di Supabase > SQL Editor.");
+  throw new ApiError(500, m || "Terjadi kesalahan.");
+};
 
 async function hashPin(pin) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("mld:" + currentUser.id + ":" + pin));
@@ -166,12 +172,16 @@ function applyLock(locked, silent) {
 }
 async function buildMe(user) {
   currentUser = user;
-  const { data, error } = await sb.from("settings").select("pin_hash").maybeSingle();
-  fail(error);
-  pinHash = data?.pin_hash || null;
-  diaryLocked = !!pinHash;
+  let pin = null;
+  try {
+    const { data, error } = await sb.from("settings").select("pin_hash").maybeSingle();
+    if (error) console.warn("Settings belum bisa dibaca:", error.message);
+    else pin = data?.pin_hash || null;
+  } catch (e) { console.warn(e); }
+  pinHash = pin;
+  diaryLocked = !!pin;
   return { user: { name: user.user_metadata?.display_name || (user.email || "").split("@")[0] || "Teman" },
-           hasPin: !!pinHash, locked: diaryLocked };
+           hasPin: !!pin, locked: diaryLocked };
 }
 async function enterApp(me) {
   authed = true; hasPin = !!me.hasPin;
@@ -181,7 +191,11 @@ async function enterApp(me) {
   document.querySelectorAll(".page").forEach(s => s.classList.toggle("show", s.id === "home"));
   document.querySelectorAll(".nav button").forEach(b => b.classList.toggle("active", b.dataset.go === "home"));
   if (me.locked) { applyLock(true, true); $("privacyStatus").textContent = "Diary terkunci. Masukkan PIN lewat tombol Unlock diary."; }
-  else { applyLock(false, true); await loadData(); }
+  else {
+    applyLock(false, true);
+    try { await loadData(); }
+    catch (err) { alert("Kamu sudah masuk, tapi data gagal dimuat: " + err.message); }
+  }
 }
 
 /* ---------- LOGIN & DAFTAR ---------- */
@@ -237,6 +251,10 @@ $("authForm").addEventListener("submit", async event => {
         emailRedirectTo: "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
         data: { display_name: name || email.split("@")[0] } } });
       if (result.error) throw result.error;
+      if (result.data.user && Array.isArray(result.data.user.identities) && result.data.user.identities.length === 0) {
+        showAuthMessage("Email ini sudah terdaftar. Klik tab Masuk lalu login (tidak perlu daftar lagi).");
+        return;
+      }
       if (!result.data.session) {
         $("authPass").value = "";
         showAuthMessage("Pendaftaran berhasil! Cek email kamu dan klik tautan verifikasi, lalu masuk.", false);
@@ -296,65 +314,79 @@ $("continueBtn").addEventListener("click",()=>prepareDiary());
 
 /* ---------- KARAKTER MOOD: wajah saja, ekspresi heboh ---------- */
 function girlSVG(m){
- const ink="#6b4235", dark="#2b1912", hair="#8b5a3c", hairDark="#6b4228", hairHi="#c08a62", brow="#6b4228";
+ const ink="#7a4a3a", dark="#3b2418", hair="#c99a72", hairBack="#a9795a", hairHi="#f0cfa8", brow="#9a6a48", red="#d9485a";
+ const uid="gc"+m.id;
  const star=(x,y,s,c)=>`<path transform="translate(${x} ${y}) scale(${s})" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2Z" fill="${c}"/>`;
  const heart=(x,y,s,c)=>`<path transform="translate(${x} ${y}) scale(${s})" d="M0 4 C-10 -3 -5 -10 0 -4 C5 -10 10 -3 0 4Z" fill="${c}"/>`;
  const drop=(x,y,s)=>`<path transform="translate(${x} ${y}) scale(${s})" d="M0 -7 Q-6 1 0 5 Q6 1 0 -7Z" fill="#8fd3f7" stroke="#4fa6dc" stroke-width="1.3"/>`;
- const blush=(o=.7,c="#ff8fa8")=>`<ellipse cx="26" cy="61" rx="5.8" ry="3.4" fill="${c}" opacity="${o}"/><ellipse cx="64" cy="61" rx="5.8" ry="3.4" fill="${c}" opacity="${o}"/><path d="M23.5 60 l-1.3 2.4 M27 60 l-1.3 2.4 M63 60 l-1.3 2.4 M66.5 60 l-1.3 2.4" stroke="#ff6f95" stroke-width=".9" stroke-linecap="round" opacity="${o}"/>`;
- const eye=(cx,rx=7,ry=8.8)=>`<ellipse cx="${cx}" cy="52" rx="${rx}" ry="${ry}" fill="#4a2a1e"/><ellipse cx="${cx}" cy="55" rx="${rx-1.5}" ry="${ry-4}" fill="#c47c52" opacity=".9"/><ellipse cx="${cx}" cy="52.6" rx="3" ry="4.2" fill="${dark}"/><circle cx="${cx+2.6}" cy="48.8" r="3.1" fill="#fff"/><circle cx="${cx-2.4}" cy="55.8" r="1.5" fill="#fff"/><circle cx="${cx+3.4}" cy="54.6" r=".8" fill="#fff"/><path d="M${cx-rx-.8} 50.5 Q${cx} ${52-ry-3.2} ${cx+rx+.8} 50.5" stroke="#3a2018" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
- const worried=cx=>`<circle cx="${cx}" cy="52" r="7.6" fill="#fff" stroke="${ink}" stroke-width="1.6"/><circle cx="${cx-.8}" cy="53" r="3" fill="#5a3426"/><circle cx="${cx-.8}" cy="53" r="1.5" fill="${dark}"/><circle cx="${cx-2}" cy="51.6" r="1" fill="#fff"/>`;
- const nose=`<path d="M44 59 Q45 60.2 46 59" stroke="#d0907a" stroke-width="1.2" fill="none" stroke-linecap="round"/>`;
+ const blush=(o=.7)=>`<ellipse cx="25" cy="63" rx="5.2" ry="3" fill="#ff8fa8" opacity="${o}"/><ellipse cx="65" cy="63" rx="5.2" ry="3" fill="#ff8fa8" opacity="${o}"/>`;
+ // mata besar ala anime, di dalam kacamata
+ const eye=(cx,ry=7.4,sad=false)=>`<ellipse cx="${cx}" cy="53.5" rx="6.3" ry="${ry}" fill="#8a5a3c"/><ellipse cx="${cx}" cy="55" rx="4.6" ry="${ry-2.4}" fill="#c98a5a" opacity=".85"/><ellipse cx="${cx}" cy="54" rx="3" ry="${ry-3.2}" fill="${dark}"/><circle cx="${cx+2.4}" cy="50.4" r="2.5" fill="#fff"/><circle cx="${cx-2.2}" cy="57" r="1.2" fill="#fff"/>${sad?`<circle cx="${cx-2.6}" cy="51" r="1.2" fill="#fff"/>`:""}<path d="M${cx-6.8} 49.5 Q${cx} ${53.5-ry-2.8} ${cx+6.8} 49.5" stroke="${dark}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+ const worried=cx=>`<ellipse cx="${cx}" cy="53.5" rx="6.6" ry="7.4" fill="#fff" stroke="${ink}" stroke-width="1.2"/><circle cx="${cx}" cy="54" r="2.8" fill="#6b4630"/><circle cx="${cx}" cy="54" r="1.4" fill="${dark}"/><circle cx="${cx-1}" cy="52.8" r=".9" fill="#fff"/>`;
+ const glasses=`<circle cx="33" cy="53.5" r="10.6" fill="#ffffff" fill-opacity=".22" stroke="${red}" stroke-width="2.3"/><circle cx="57" cy="53.5" r="10.6" fill="#ffffff" fill-opacity=".22" stroke="${red}" stroke-width="2.3"/><path d="M43.4 52 Q45 50.2 46.6 52" fill="none" stroke="${red}" stroke-width="2.1" stroke-linecap="round"/><path d="M26 46.5 Q29 44 33 43.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/><path d="M50 46.5 Q53 44 57 43.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>`;
+ const nose=`<path d="M44.2 60.6 Q45 61.4 45.8 60.6" stroke="#d99a86" stroke-width="1" fill="none" stroke-linecap="round"/>`;
  const faces={
   Happy:`
-   <path d="M27 55.5 Q34 43 41 55.5 M49 55.5 Q56 43 63 55.5" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>
-   ${blush(.9)}${nose}
-   <path d="M37.5 63.5 Q45 76 52.5 63.5Z" fill="#e8667f" stroke="${ink}" stroke-width="1.4" stroke-linejoin="round"/>
-   <path d="M39.5 64 L42.5 64 L41 67Z" fill="#fff"/><path d="M47.5 64 L50.5 64 L49 67Z" fill="#fff"/>
-   <ellipse cx="45" cy="69.5" rx="3.6" ry="2.2" fill="#ff9bb0"/>`,
+   <path d="M27 56 Q33 47 39 56 M51 56 Q57 47 63 56" fill="none" stroke="${ink}" stroke-width="2.8" stroke-linecap="round"/>
+   ${blush(.95)}${nose}
+   <path d="M39.5 65 Q45 76 50.5 65Z" fill="#e8667f" stroke="${ink}" stroke-width="1.2" stroke-linejoin="round"/>
+   <ellipse cx="45" cy="69.5" rx="3" ry="1.8" fill="#ff9bb0"/>`,
   Calm:`
-   ${eye(34)}${eye(56)}
-   <path d="M28 43 Q34 40.5 40 42 M50 42 Q56 40.5 62 43" fill="none" stroke="${brow}" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
-   ${blush(.7)}${nose}
-   <path d="M40.5 65 Q42.7 68.5 45 65 Q47.3 68.5 49.5 65" fill="none" stroke="#d65a74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+   ${eye(33)}${eye(57)}
+   <path d="M27 42.5 Q33 40.5 39 42 M51 42 Q57 40.5 63 42.5" fill="none" stroke="${brow}" stroke-width="1.4" stroke-linecap="round" opacity=".75"/>
+   ${blush(.75)}${nose}
+   <path d="M42 66.5 Q45 69 48 66.5" fill="none" stroke="#d65a74" stroke-width="1.8" stroke-linecap="round"/>`,
   Tired:`
-   <path d="M27.5 52.5 Q34 56.5 40.5 52.5 M49.5 52.5 Q56 56.5 62.5 52.5" fill="none" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/>
-   <path d="M27 51.5 l-2.5 1.8 M63 51.5 l2.5 1.8" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>
-   <path d="M27 44.5 Q33 41 40 42.5 M50 42.5 Q57 41 63 44.5" fill="none" stroke="${brow}" stroke-width="1.7" stroke-linecap="round" opacity=".85"/>
-   ${blush(.55)}${nose}
-   <path d="M40.5 67.5 Q42.7 65 45 67.5 Q47.3 70 49.5 67.5" fill="none" stroke="#d65a74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+   <path d="M27 54 Q33 59 39 54 M51 54 Q57 59 63 54" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>
+   <path d="M27.5 53.5 l-2.2 1.6 M38.5 53.5 l2.2 1.6 M51.5 53.5 l-2.2 1.6 M62.5 53.5 l2.2 1.6" stroke="${ink}" stroke-width="1.3" stroke-linecap="round"/>
+   <path d="M27 43.5 Q33 41 39 43 M51 43 Q57 41 63 43.5" fill="none" stroke="${brow}" stroke-width="1.5" stroke-linecap="round" opacity=".8"/>
+   <path d="M28 61 Q33 63 38 61 M52 61 Q57 63 62 61" fill="none" stroke="#c9a0b8" stroke-width="1.1" stroke-linecap="round" opacity=".7"/>
+   ${blush(.5)}${nose}
+   <path d="M41.5 68 Q43.3 66 45 68 Q46.7 70 48.5 68" fill="none" stroke="#d65a74" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
   Sad:`
-   ${eye(34,6.8,8.8)}${eye(56,6.8,8.8)}
-   <ellipse cx="34" cy="58.8" rx="5" ry="1.5" fill="#bfe8ff" opacity=".85"/><ellipse cx="56" cy="58.8" rx="5" ry="1.5" fill="#bfe8ff" opacity=".85"/>
-   <path d="M28 43.5 Q34 42 40 38.5 M62 43.5 Q56 42 50 38.5" fill="none" stroke="${brow}" stroke-width="1.7" stroke-linecap="round"/>
-   <path d="M30.5 60 Q27.5 67 29.5 74 L34.5 74 Q36 67 33.5 60Z" fill="#a7e0fa" stroke="#5fb3e6" stroke-width="1.1" opacity=".95"/>
-   <path d="M59.5 60 Q62.5 67 60.5 74 L55.5 74 Q54 67 56.5 60Z" fill="#a7e0fa" stroke="#5fb3e6" stroke-width="1.1" opacity=".95"/>
-   ${blush(.5)}${nose}
-   <path d="M40 69.5 Q45 64.5 50 69.5" fill="none" stroke="#d65a74" stroke-width="2.2" stroke-linecap="round"/>`,
+   ${eye(33,7.8,true)}${eye(57,7.8,true)}
+   <path d="M27 44 Q33 42.5 39 39 M63 44 Q57 42.5 51 39" fill="none" stroke="${brow}" stroke-width="1.5" stroke-linecap="round"/>
+   <path d="M30 62 Q27 69 29 76 L34 76 Q35.5 69 33.5 62Z" fill="#a7e0fa" stroke="#5fb3e6" stroke-width="1" opacity=".95"/>
+   <path d="M60 62 Q63 69 61 76 L56 76 Q54.5 69 56.5 62Z" fill="#a7e0fa" stroke="#5fb3e6" stroke-width="1" opacity=".95"/>
+   ${blush(.55)}${nose}
+   <path d="M41 70 Q45 65.5 49 70" fill="none" stroke="#d65a74" stroke-width="2" stroke-linecap="round"/>`,
   Anxious:`
-   <path d="M28 43.5 Q33 40.5 40 39 M62 43.5 Q57 40.5 50 39" fill="none" stroke="${brow}" stroke-width="1.7" stroke-linecap="round"/>
-   ${worried(34)}${worried(56)}
+   <path d="M27 41 Q33 39.5 39.5 38 M63 41 Q57 39.5 50.5 38" fill="none" stroke="${brow}" stroke-width="1.5" stroke-linecap="round"/>
+   ${worried(33)}${worried(57)}
    ${blush(.5)}${nose}
-   <path d="M39 68.5 Q42 65.5 45 68.5 Q48 71.5 51 68.5" fill="none" stroke="#d65a74" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`
+   <path d="M40 69 Q42.5 66.5 45 69 Q47.5 71.5 50 69" fill="none" stroke="#d65a74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
  };
  const extras={
   Happy:`${star(10,14,1.1,"#fff7b0")}${star(81,13,1.3,"#ffffff")}${heart(85,40,.9,"#ff7fa0")}${heart(5,40,.9,"#ff8fb0")}${star(84,78,.7,"#fff7b0")}${star(6,74,.6,"#ffffff")}`,
   Calm:`<circle cx="9" cy="22" r="3.2" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16" cy="10" r="2" fill="none" stroke="#fff" stroke-width="1.6"/><circle cx="83" cy="26" r="2.6" fill="none" stroke="#fff" stroke-width="1.6"/>${star(80,12,.9,"#ffffff")}${heart(84,70,.7,"#ffb3c8")}`,
   Tired:`<text x="68" y="22" font-size="14" font-weight="900" fill="#7a5fc4" font-family="Trebuchet MS,sans-serif">Z</text><text x="77" y="12" font-size="10" font-weight="900" fill="#9b84dc" font-family="Trebuchet MS,sans-serif">z</text><circle cx="75" cy="64" r="4.2" fill="#fff" opacity=".75" stroke="#cdbdf5"/>${drop(11,36,.9)}`,
   Sad:`${star(10,12,.8,"#ffffff")}${star(82,16,.7,"#ffffff")}${drop(83,40,.7)}`,
-  Anxious:`${drop(78,30,1.1)}${drop(12,34,.9)}<path d="M33 31 v8 M41 33 v9 M49 33 v9 M57 31 v8" stroke="#7b8bc4" stroke-width="1.8" stroke-linecap="round" opacity=".75"/><path d="M4 42 Q1 50 4 58 M86 42 Q89 50 86 58" fill="none" stroke="${ink}" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>`
+  Anxious:`${drop(79,30,1.1)}${drop(11,34,.9)}<path d="M33 31 v6 M41 31 v7 M49 31 v7 M57 31 v6" stroke="#7b8bc4" stroke-width="1.6" stroke-linecap="round" opacity=".7"/><path d="M4 42 Q1 50 4 58 M86 42 Q89 50 86 58" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" opacity=".45"/>`
  };
  return `<svg viewBox="0 0 90 90" role="img" aria-label="${m.label}">
+ <defs><clipPath id="${uid}"><circle cx="45" cy="45" r="41"/></clipPath></defs>
  <circle cx="45" cy="45" r="41" fill="${m.bg}"/>
- <path d="M13 52 Q6 12 45 8 Q84 12 77 52 L78 66 Q70 75 63 63 L27 63 Q20 75 12 66Z" fill="${hairDark}"/>
- <ellipse cx="45" cy="51" rx="26" ry="24" fill="${m.skin}" stroke="#e8b99a" stroke-width="1.2"/>
+ <g clip-path="url(#${uid})">
+  <path d="M8 92 Q10 76 30 73 L60 73 Q80 76 82 92Z" fill="#eaa6a0" stroke="#d98a86" stroke-width="1"/>
+  <path d="M33 73 L45 86 L57 73Z" fill="#fffdf8" stroke="#e6d4cc" stroke-width=".8"/>
+  <path d="M42 80 L45 77 L48 80 L46 86 L44 86Z" fill="#4a5f8c"/>
+  <path d="M30 73 Q31 80 28 90 M60 73 Q59 80 62 90" fill="none" stroke="#d98a86" stroke-width="1.2" stroke-linecap="round"/>
+  <circle cx="22" cy="82" r="1.3" fill="#fff7ef"/><circle cx="68" cy="82" r="1.3" fill="#fff7ef"/>
+ </g>
+ <path d="M12 54 Q6 12 45 8 Q84 12 78 54 L79 70 Q70 77 63 68 L27 68 Q20 77 11 70Z" fill="${hairBack}"/>
+ <path d="M39 70 L39 76 Q45 80 51 76 L51 70Z" fill="${m.skin}"/>
+ <ellipse cx="45" cy="53" rx="25.5" ry="23" fill="${m.skin}" stroke="#e8b99a" stroke-width="1.1"/>
  ${faces[m.id]}
- <path d="M12 67 Q2 42 9 24 Q19 6 45 6 Q71 6 81 24 Q88 42 78 67 Q71 71 67 61 L66 47 Q64 38 60 34 Q56 37 52 32 Q48 37 44 32 Q40 37 36 32 Q32 37 29 34 Q25 38 24 47 L23 61 Q19 71 12 67Z" fill="${hair}"/>
- <path d="M45 7 Q38 -1 48 1.5 Q43 3.5 47 8" fill="none" stroke="${hair}" stroke-width="2.4" stroke-linecap="round"/>
- <path d="M24 17 Q45 8 66 17" fill="none" stroke="${hairHi}" stroke-width="3" stroke-linecap="round" opacity=".7"/>
- <path d="M30 24 Q38 20 46 22 M54 23 Q60 21 66 24" fill="none" stroke="${hairHi}" stroke-width="1.4" stroke-linecap="round" opacity=".6"/>
- <path d="M15 48 Q14 58 15 64 M75 48 Q76 58 75 64" fill="none" stroke="${hairHi}" stroke-width="2" stroke-linecap="round" opacity=".6"/>
- <path d="M23 21 L11 14 L12 29Z M23 21 L35 14 L34 29Z" fill="#ff8fb5" stroke="#f0668f" stroke-width="1" stroke-linejoin="round"/>
- <circle cx="23" cy="21.5" r="3.4" fill="#ff6f9f"/>
+ ${glasses}
+ <path d="M13 50 Q12 62 16 72 Q23 69 23 58 L23 46Z" fill="${hair}"/>
+ <path d="M77 50 Q78 62 74 72 Q67 69 67 58 L67 46Z" fill="${hair}"/>
+ <path d="M14 48 Q8 14 45 8 Q82 14 76 48 Q72 33 64 31 Q56 39 48 28 Q42 39 33 30 Q22 34 14 48Z" fill="${hair}"/>
+ <path d="M44 9 Q38 -1 48.5 2 Q43.5 4 47 9.5" fill="none" stroke="${hair}" stroke-width="2.4" stroke-linecap="round"/>
+ <path d="M24 17 Q45 7 66 17" fill="none" stroke="${hairHi}" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+ <path d="M29 26 Q36 22 43 24 M52 24 Q59 22 65 26" fill="none" stroke="${hairHi}" stroke-width="1.3" stroke-linecap="round" opacity=".7"/>
+ <path d="M15 56 Q14.5 63 17 68" fill="none" stroke="${hairHi}" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+ <path d="M70 19 L64 14 L63 24Z M70 19 L77 15 L76 25Z" fill="#ff9fc0" stroke="#f0668f" stroke-width=".9" stroke-linejoin="round"/>
+ <circle cx="70" cy="19.5" r="2.8" fill="#ff6f9f"/>
  ${extras[m.id]}
  </svg>`;
 }
