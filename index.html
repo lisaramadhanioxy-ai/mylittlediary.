@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffca9d">
+<title>My Little Diary — A Tiny Happy Place</title>
+<style>
+:root{
+  --ink:#59404a;--cream:#fffaf0;--pink:#ffb6c9;--blue:#a8e1f2;
+  --yellow:#ffe18b;--orange:#ff9d80;--green:#c9e9a6;--purple:#d4c3ff;
+  --shadow:0 7px 0 #8f654022,0 14px 30px #6f4a4010;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;color:var(--ink);
+  font-family:"Trebuchet MS",system-ui,sans-serif;
+  background:
+   radial-gradient(circle,#ffb8cf 2px,transparent 3px) 0 0/35px 35px,
+   radial-gradient(circle,#9cdef0 2px,transparent 3px) 17px 17px/35px 35px,
+   #fff2d9;
+}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #8bcfe5;outline-offset:3px}
+header{
+  padding:25px 16px 32px;text-align:center;
+  background:linear-gradient(130deg,#ffc0d1,#ffe4a0 55%,#b9eafa);
+  border-bottom:5px solid #fffaf0;border-radius:0 0 38px 38px;
+  position:relative;overflow:hidden;
+}
+header:before,header:after{
+  content:"";position:absolute;border-radius:50%;background:#ffffff55;
+}
+header:before{width:130px;height:130px;left:-30px;top:-50px}
+header:after{width:90px;height:90px;right:-15px;bottom:-30px}
+.brand{font-size:clamp(30px,7vw,49px);font-weight:1000;letter-spacing:-2px;position:relative}
+.brand span{color:#f07887}
+header p{margin:7px 0 0;position:relative}
+.nav{
+  display:flex;gap:8px;overflow-x:auto;padding:12px 14px;
+  position:sticky;top:0;background:#fffaf0ed;z-index:20;
+  border-bottom:2px solid #f6dfc9;backdrop-filter:blur(8px)
+}
+.nav button{flex:0 0 auto;background:white;border:2px solid #f0dfcf;padding:10px 15px;border-radius:18px;font-weight:800}
+.nav button.active{background:#ffd5df;border-color:#ff9db9}
+main{width:min(980px,100%);margin:auto;padding:16px 13px 50px}
+.panel{
+  background:var(--cream);border:3px solid white;border-radius:29px;
+  padding:20px;margin:0 0 18px;box-shadow:var(--shadow);position:relative;overflow:hidden
+}
+/* Satu halaman tampil pada satu waktu */
+.page{display:none}
+.page.show{display:block}
+h2{font-size:25px;margin:0 0 10px;letter-spacing:-.7px}
+h3{margin:12px 0 8px}
+p{line-height:1.65}
+.small{font-size:13px;opacity:.8}
+.hero{
+  background:linear-gradient(125deg,#ffe0ab,#ffb5c8 55%,#a9e2f2);
+  min-height:195px;padding:25px 20px;border-radius:25px;border:2px solid white;
+  position:relative;overflow:hidden
+}
+.hero:after{content:"";position:absolute;width:140px;height:140px;right:-25px;top:-30px;border-radius:50%;background:#fff7c0aa}
+.hero h2{font-size:clamp(27px,6vw,39px);max-width:75%}
+.hero p{max-width:70%}
+.primary,.pill{
+  background:var(--orange);border-radius:16px;padding:12px 16px;
+  box-shadow:0 4px 0 #d97b66;color:#503c40;font-weight:900
+}
+.pill{background:var(--yellow);box-shadow:0 4px 0 #d5b35f;padding:10px 14px}
+.pink{background:var(--pink);box-shadow:0 4px 0 #df91a6}
+.blue{background:var(--blue);box-shadow:0 4px 0 #79b9cd}
+.purple{background:var(--purple);box-shadow:0 4px 0 #a899d4}
+.green{background:var(--green);box-shadow:0 4px 0 #94c77e}
+button:active{transform:translateY(2px)}
+/* Tombol Backup & Privasi yang rapi */
+.tool-label{font-size:12px;font-weight:900;letter-spacing:.6px;opacity:.7;margin:16px 0 8px}
+.btn-grid{display:grid;gap:10px}
+.btn-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.btn-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tool{
+  min-height:52px;padding:10px 8px;border-radius:16px;font-weight:900;font-size:14px;
+  line-height:1.25;text-align:center;display:grid;place-items:center;
+  cursor:pointer;color:#503c40;border:0;width:100%
+}
+.field{display:grid;gap:6px;margin:12px 0}
+input,textarea,select{
+  width:100%;border:2px solid #f0dfcf;border-radius:15px;
+  padding:12px;background:#fffdf8;min-width:0
+}
+textarea{min-height:125px;resize:vertical}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mood-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.mood{
+  background:white;border:2px solid #f0e1d2;border-radius:18px;
+  padding:8px 4px;text-align:center;font-weight:800;min-width:0
+}
+.mood svg{width:76px;max-width:100%;display:block;margin:auto}
+.mood.selected{border-color:#ff91b0;background:#fff0f5;box-shadow:0 3px 0 #ffbfd0}
+.mood span{display:block;font-size:13px;padding:5px 0 2px}
+.hidden{display:none!important}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+#room{
+  height:360px;position:relative;overflow:hidden;border-radius:25px;
+  border:5px solid #fff;outline:3px solid #a6dbe6;
+  background:linear-gradient(#aee4f6 0 52%,#ffdcaa 52% 55%,#bfe59e 55% 100%);
+  isolation:isolate;touch-action:pan-y
+}
+#room.night{
+ background:linear-gradient(#454e80 0 52%,#897ba7 52% 55%,#728d80 55% 100%);
+}
+.window{
+ position:absolute;left:15px;top:17px;width:78px;height:95px;
+ border:6px solid #fff4d9;border-radius:42px 42px 9px 9px;
+ background:linear-gradient(90deg,transparent 46%,#fff4d9 47% 53%,transparent 54%),
+ linear-gradient(0deg,transparent 47%,#fff4d9 48% 53%,transparent 54%),#8bd5ef;
+ box-shadow:0 5px #d9a47b
+}
+.sun{
+ position:absolute;left:33px;top:28px;width:32px;height:32px;
+ border-radius:50%;background:#ffdc74;box-shadow:0 0 0 7px #fff0a355
+}
+.night .sun{background:#f5f0ca;box-shadow:0 0 0 8px #fff9d622}
+.cloud{position:absolute;right:22px;top:27px;width:63px;height:22px;background:white;border-radius:30px}
+.cloud:before,.cloud:after{content:"";position:absolute;background:inherit;border-radius:50%}
+.cloud:before{width:29px;height:30px;left:10px;top:-14px}
+.cloud:after{width:35px;height:35px;right:8px;top:-17px}
+.night .cloud{background:#bbc0e1}
+.wall-shelf{position:absolute;right:15px;top:116px;width:91px;height:8px;background:#bd825f;border-radius:5px;box-shadow:0 4px #936044}
+.wall-shelf:before{content:"";position:absolute;left:15px;bottom:6px;width:25px;height:33px;background:#ff9bb9;border-radius:4px 4px 8px 8px}
+.wall-shelf:after{content:"";position:absolute;right:14px;bottom:6px;width:20px;height:26px;background:#e9c8ff;border-radius:5px}
+.picture{position:absolute;left:112px;top:22px;width:49px;height:43px;background:#fff6dd;border:4px solid white;border-radius:9px;transform:rotate(-5deg)}
+.picture:after{content:"";position:absolute;inset:8px;background:linear-gradient(140deg,#ffb5c6 50%,#a3d9ad 51%);border-radius:4px}
+.rug{
+ position:absolute;left:9%;bottom:9px;width:82%;height:50px;
+ border-radius:50%;border:4px solid #fff4d8;
+ background:repeating-linear-gradient(135deg,#ffe9bb 0 13px,#fff1d4 13px 26px);
+ z-index:1;pointer-events:none
+}
+.plant{
+ position:absolute;bottom:54px;right:12%;width:32px;height:35px;z-index:2
+}
+.plant:before{content:"";position:absolute;bottom:0;left:7px;width:20px;height:19px;background:#ff9cb5;clip-path:polygon(0 0,100% 0,80% 100%,20% 100%)}
+.plant:after{content:"";position:absolute;left:12px;top:-6px;width:8px;height:14px;background:#4fbd82;border-radius:100% 0}
+.wall-star{position:absolute;top:170px;left:27%;color:#fff5bf;font-size:24px}
+.wall-heart{position:absolute;right:25%;top:195px;color:#ff9eb9;font-size:25px}
+.floor-toy{position:absolute;bottom:52px;left:16px;width:30px;height:24px;background:#ffd779;border:3px solid white;border-radius:50%;z-index:2}
+.pet{
+ position:absolute;width:86px;height:85px;z-index:5;touch-action:none;
+ user-select:none;cursor:grab;transform-origin:center bottom
+}
+.pet:active{cursor:grabbing}
+.pet svg{width:100%;height:100%;overflow:visible;pointer-events:none}
+/* Putar badan: sprite dibalik secara halus saat arah berubah */
+.pet .sprite{width:100%;height:100%;transition:transform .45s ease}
+.pet.face-right .sprite{transform:scaleX(-1)}
+.pet .legs{transform-box:fill-box;transform-origin:center top}
+.pet.walk .legs{animation:legWalk 1.8s ease-in-out infinite alternate}
+.pet.walk .legs.back{animation-delay:-.9s}
+.pet.walk .body{animation:bodyWalk 2.6s ease-in-out infinite}
+.pet.sleeping .open-eyes{display:none}
+.pet.sleeping .closed-eyes{display:block}
+.pet .closed-eyes{display:none}
+.pet.sleeping .legs{animation:none!important}
+.pet.sleeping .body{animation:none!important}
+.petname{
+ position:absolute;bottom:-3px;left:50%;transform:translateX(-50%);
+ background:#fffaf0;border:2px solid white;border-radius:10px;
+ padding:2px 8px;font-size:11px;font-weight:900;white-space:nowrap;pointer-events:none
+}
+@keyframes legWalk{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+@keyframes bodyWalk{0%,100%{translate:0 0}50%{translate:0 -1.5px}}
+#snacks-layer{position:absolute;inset:0;z-index:12;pointer-events:none}
+.snack{
+ position:absolute;width:40px;height:40px;background:none;border:0;box-shadow:none;
+ display:grid;place-items:center;touch-action:none;pointer-events:auto;cursor:grab;
+ user-select:none;-webkit-tap-highlight-color:transparent
+}
+.snack svg{width:40px;height:40px;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(80,50,30,.3))}
+.snack.bounce{animation:snackLand .2s ease-out}
+@keyframes snackLand{0%{transform:scale(1.2,.7)}65%{transform:scale(.9,1.1)}100%{transform:scale(1)}}
+#room.sleeping-room:after{
+ content:"z  z";position:absolute;right:20%;top:48%;color:#fff4c8;
+ font-size:25px;font-weight:900;letter-spacing:9px;z-index:10;pointer-events:none
+}
+#room.night .rug{background:repeating-linear-gradient(135deg,#c1b3d9 0 13px,#d5cbe7 13px 26px)}
+.controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:15px}
+.controls button{padding:14px 7px;border-radius:17px;font-weight:900;line-height:1.3}
+.snack-shop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}
+.snack-shop button{padding:12px 4px;border-radius:16px;font-weight:900;border:2px solid #fff;box-shadow:0 4px #8d6c4c30}
+.snack-shop small{display:block;font-weight:500;font-size:11px;margin-top:4px}
+.status{min-height:24px;font-size:13px;font-weight:800;color:#86616b}
+.entry{padding:13px;border:2px solid #f0e2d2;border-radius:16px;background:white;margin:10px 0}
+.entry p{white-space:pre-wrap;overflow-wrap:anywhere}
+.garden{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.garden-cell{
+ min-width:0;aspect-ratio:1;border-radius:12px;background:#fff0d4;
+ border:2px solid #f7ddb2;display:grid;place-items:center;position:relative;overflow:hidden
+}
+.garden-cell svg{width:90%;height:90%}
+.garden-cell small{position:absolute;bottom:1px;font-size:9px;background:#fffaf0bb;border-radius:5px;padding:0 3px}
+.meter{height:12px;background:#f0e2d2;border-radius:99px;overflow:hidden;margin:10px 0}
+.meter div{height:100%;background:linear-gradient(90deg,#8dddb0,#ffcf77,#ff9fbc);width:0;transition:width .4s}
+#recapPoster{border-radius:22px;overflow:hidden;box-shadow:0 8px 24px #6f4a4033;border:4px solid #fff;background:#fff;min-height:60px}
+#recapPoster > svg{display:block;width:100%;height:auto}
+.pop{position:fixed;inset:0;background:#4b304066;z-index:60;display:none;place-items:center;padding:20px}
+.pop.show{display:grid}
+.pop-card{background:var(--cream);border:4px solid #fff;border-radius:28px;padding:22px;max-width:360px;width:100%;text-align:center;box-shadow:0 14px 40px #4b304055}
+.pop-card h2{margin-bottom:6px}
+.userbar{position:absolute;top:10px;right:12px;display:flex;gap:8px;align-items:center;z-index:2;font-size:13px}
+.userbar button{padding:7px 12px;border-radius:14px;background:#fffaf0;box-shadow:0 3px 0 #d9b99c;font-weight:900;color:#503c40;font-size:12px}
+.auth{width:min(480px,100%);margin:0 auto;padding:18px 13px 60px}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.auth-tabs button{padding:11px;border-radius:16px;background:#fff;border:2px solid #f0dfcf;font-weight:900}
+.auth-tabs button.active{background:#ffd5df;border-color:#ff9db9}
+body.authed .auth{display:none}
+body:not(.authed) main,body:not(.authed) .nav,body:not(.authed) .fab{display:none}
+footer{text-align:center;padding:15px 15px 75px;font-size:12px;opacity:.75}
+/* Tombol musik melayang, tersedia di semua halaman */
+.fab{
+ position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:40;
+ background:var(--yellow);border-radius:99px;padding:11px 16px;font-weight:900;color:#503c40;
+ box-shadow:0 4px 0 #d5b35f,0 8px 20px #6f4a4033
+}
+.fab.on{background:var(--green);box-shadow:0 4px 0 #94c77e,0 8px 20px #6f4a4033}
+@media(min-width:700px){
+ main{padding-top:23px}
+ .two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+ .two-col .panel{margin:0 0 18px}
+ #room{height:400px}
+}
+@media(max-width:390px){
+ .panel{padding:15px}
+ #room{height:325px}
+ .pet{width:76px;height:76px}
+ .controls button{font-size:12px}
+ .mood-grid{gap:5px}
+ .mood svg{width:65px}
+ .tool{font-size:13px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">My Little <span>Diary</span></div>
+  <p>A colorful little world, made just for you.</p>
+  <div id="userbar" class="userbar hidden"><span>Hai, <b id="userName"></b></span><button type="button" id="logoutBtn">Keluar</button></div>
+</header>
+
+<section id="authScreen" class="auth">
+  <div class="panel">
+    <h2 id="authTitle">Masuk</h2>
+    <p class="small">Diary-mu tersimpan di akunmu sendiri dan hanya bisa dibuka olehmu. Data akun lain tidak akan pernah terlihat.</p>
+    <div class="auth-tabs"><button type="button" id="tabLogin" class="active">Masuk</button><button type="button" id="tabRegister">Daftar</button></div>
+    <form id="authForm">
+      <div class="field hidden" id="nameField"><label for="authName">Nama panggilan</label><input id="authName" maxlength="40" autocomplete="nickname" placeholder="Opsional"></div>
+      <div class="field"><label for="authUser">Username</label><input id="authUser" required minlength="3" maxlength="30" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+      <div class="field"><label for="authPass">Password</label><input id="authPass" type="password" required minlength="8" maxlength="128" autocomplete="current-password"></div>
+      <button class="primary" type="submit" id="authSubmit">Masuk</button>
+    </form>
+    <p id="authMsg" class="status" role="alert"></p>
+    <p class="small">Password minimal 8 karakter. Username 3-30 karakter (huruf, angka, titik, strip, garis bawah).</p>
+  </div>
+</section>
+
+<nav class="nav" aria-label="Menu">
+  <button class="active" data-go="home">My Corner</button>
+  <button data-go="room-section">Little Room</button>
+  <button data-go="diary-section">My Diary</button>
+  <button data-go="garden-section">Memory Garden</button>
+  <button data-go="recap-section">Monthly Recap</button>
+  <button data-go="memory-section">Memory Jar</button>
+</nav>
+
+<main>
+<section id="home" class="panel page show">
+  <div class="hero">
+    <div class="small">YOUR LITTLE CORNER OF THE WORLD</div>
+    <h2>Hari ini, ceritamu yang paling penting.</h2>
+    <p>Simpan hal kecil yang membuat harimu berarti. Pelan-pelan, semuanya akan tumbuh menjadi kenangan.</p>
+    <button class="primary" id="heroWrite">Write a little story ↗</button>
+  </div>
+  <div class="section-title" style="margin-top:20px">
+    <h2>How are you, really?</h2><span class="small">MOOD CLUB</span>
+  </div>
+  <p class="small">Pilih karakter yang paling menggambarkan perasaanmu hari ini.</p>
+  <div id="moods" class="mood-grid"></div>
+  <div class="field">
+    <label for="quickThought"><b>A tiny thought for today</b></label>
+    <textarea id="quickThought" placeholder="Ceritakan sedikit saja..."></textarea>
+  </div>
+  <button class="primary pink" id="continueBtn">Continue my story →</button>
+</section>
+
+<section id="room-section" class="panel page">
+  <div class="section-title">
+    <h2>Little Companions' Room</h2>
+    <span class="small">A tiny world to play in</span>
+  </div>
+  <p class="small">Geser hewan atau camilan dengan jari. Camilan akan jatuh ke lantai jika tidak mengenai hewan.</p>
+  <div id="room">
+    <div class="window"><div class="sun"></div></div>
+    <div class="cloud"></div><div class="picture"></div>
+    <div class="wall-shelf"></div><div class="wall-star">✦</div><div class="wall-heart">♥</div>
+    <div class="plant"></div><div class="floor-toy"></div><div class="rug"></div>
+    <div id="snacks-layer"></div>
+  </div>
+  <div class="controls">
+    <button class="blue" id="walkBtn">Let them<br>wander</button>
+    <button class="purple" id="sleepBtn">Sleepy<br>time</button>
+    <button class="pill" id="musicBtn">Play cozy<br>music</button>
+  </div>
+  <p class="small">Tip: seret temanmu, atur tempatnya, lalu biarkan mereka menikmati kamar.</p>
+  <h3>Snack shop</h3>
+  <p class="small">Pilih camilan, seret ke tubuh temanmu, lalu lepaskan. Camilan hanya dimakan setelah dilepas.</p>
+  <div class="snack-shop">
+    <button style="background:#ffad99" data-snack="apple">Apple slice<small>Fresh & sweet</small></button>
+    <button style="background:#ffe18b" data-snack="cookie">Tiny cookie<small>Crunchy treat</small></button>
+    <button style="background:#a8e1f2" data-snack="carrot">Carrot<small>Little crunch</small></button>
+    <button style="background:#ffb6c9" data-snack="strawberry">Strawberry<small>Sweet & juicy</small></button>
+    <button style="background:#ffe9a0" data-snack="cheese">Cheese<small>Yummy slice</small></button>
+    <button style="background:#bfe3f7" data-snack="fish">Fish<small>Tiny snack</small></button>
+  </div>
+  <p id="snackStatus" class="status" aria-live="polite">Teman-temanmu sedang menunggu camilan.</p>
+</section>
+
+<section id="diary-section" class="panel page">
+  <div class="section-title"><h2>My Daily Diary</h2><span class="small">YOUR PRIVATE PAGES</span></div>
+  <p class="small">Satu hari, satu halaman kecil untuk dirimu sendiri.</p>
+  <form id="diaryForm">
+    <div class="grid">
+      <div class="field"><label for="entryDate">Tanggal</label><input type="date" id="entryDate" required></div>
+      <div class="field"><label for="entryTitle">Judul cerita</label><input id="entryTitle" maxlength="100" placeholder="Hari yang..." required></div>
+    </div>
+    <div class="field"><label for="entryMood">Mood hari ini</label><select id="entryMood"></select></div>
+    <div class="field"><label for="entryBody">Apa yang terjadi hari ini?</label><textarea id="entryBody" placeholder="Tidak harus sempurna. Tulis saja apa adanya..." required></textarea></div>
+    <div class="field"><label for="entryGratitude">Satu hal yang kamu syukuri</label><input id="entryGratitude" placeholder="Sekecil apa pun boleh"></div>
+    <div class="field"><label for="entrySong">Lagu yang menemani</label><input id="entrySong" placeholder="Judul lagu atau penyanyi"></div>
+    <button class="primary" type="submit">Save today's story ♡</button>
+    <button class="pill" type="button" id="clearForm">Clear form</button>
+  </form>
+  <p id="saveStatus" class="status" aria-live="polite"></p>
+  <div class="field"><label for="searchEntries"><b>Find an old story</b></label><input id="searchEntries" placeholder="Cari judul, isi, atau mood..."></div>
+  <div id="entries"></div>
+</section>
+
+<section id="garden-section" class="panel page">
+  <h2>Memory Garden</h2>
+  <p>Setiap diary yang kamu simpan membantu bunga bertumbuh. Hari pertama dimulai dari tanah, lalu tunas muncul, batang memanjang, kuncup terbentuk, dan bunga mekar pada hari ketujuh.</p>
+  <div class="section-title"><b>Weekly bloom</b><span id="gardenProgress" class="small">0/7 diary days</span></div>
+  <div class="meter"><div id="gardenMeter"></div></div>
+  <div id="mainFlower" style="width:180px;max-width:100%;margin:auto"></div>
+  <p id="flowerCaption" style="text-align:center;font-weight:900"></p>
+  <h3>Your little garden calendar</h3>
+  <div id="gardenGrid" class="garden"></div>
+  <p class="small">Satu hari dihitung satu kali jika kamu menyimpan diary pada tanggal tersebut. Minggu berikutnya dimulai dari tanah lagi dengan jenis bunga yang berbeda.</p>
+</section>
+
+<section id="recap-section" class="panel page">
+  <div class="section-title"><h2>Monthly Recap</h2><span class="small">KENANGAN BULANANMU</span></div>
+  <p class="small">Setiap berganti bulan, rekap bulan sebelumnya muncul otomatis saat kamu membuka diary. Kamu juga bisa melihat bulan lain kapan saja dan mengunduhnya.</p>
+  <div class="field"><label for="recapMonth">Pilih bulan</label><select id="recapMonth"></select></div>
+  <div id="recapPoster"></div>
+  <div class="btn-grid two" style="margin-top:14px">
+    <button type="button" class="tool blue" id="recapPng">Download PNG</button>
+    <button type="button" class="tool purple" id="recapSvg">Download SVG</button>
+  </div>
+  <p id="recapStatus" class="status" aria-live="polite"></p>
+</section>
+
+<section id="memory-section" class="panel page">
+  <div id="memoryPrivate">
+    <h2>Memory Jar</h2>
+    <p>Masukkan hal kecil yang ingin kamu simpan untuk dibaca lagi nanti.</p>
+    <div class="field"><label for="memoryText">Kenangan kecil</label><textarea id="memoryText" placeholder="Aku ingin mengingat..."></textarea></div>
+    <button class="primary pink" id="addMemory">Put it in the jar</button>
+    <p id="memoryStatus" class="status" aria-live="polite"></p>
+    <div id="memoryList"></div>
+    <hr style="border:0;border-top:2px dashed #eddcc8;margin:22px 0">
+    <h3>A letter to future me</h3>
+    <div class="field"><label for="futureLetter">Pesan untuk dirimu nanti</label><textarea id="futureLetter" placeholder="Hai, diriku di masa depan..."></textarea></div>
+    <button class="pill" id="saveLetter">Save my letter</button>
+    <p id="letterStatus" class="status"></p>
+    <hr style="border:0;border-top:2px dashed #eddcc8;margin:22px 0">
+  </div>
+  <h3>Backup & privacy</h3>
+  <p class="small">Diary tersimpan aman di akunmu di server. Unduh backup secara berkala kalau kamu mau menyimpan salinan sendiri. Backup hanya berisi data akunmu.</p>
+  <div class="tool-label">BACKUP</div>
+  <div class="btn-grid two">
+    <button type="button" class="tool blue" id="exportBtn">Export backup</button>
+    <label class="tool purple">Import backup<input id="importFile" type="file" accept=".json,application/json" hidden></label>
+  </div>
+  <div class="tool-label">PRIVASI</div>
+  <div class="btn-grid three">
+    <button type="button" class="tool pill" id="pinBtn">Set diary PIN</button>
+    <button type="button" class="tool pink" id="lockBtn">Lock diary</button>
+    <button type="button" class="tool green" id="unlockBtn">Unlock diary</button>
+  </div>
+  <p id="privacyStatus" class="status"></p>
+</section>
+<footer>Made with care, little by little. ♡</footer>
+</main>
+
+<div class="pop" id="pinPop" role="dialog" aria-modal="true">
+  <form class="pop-card" id="pinForm" autocomplete="off">
+    <h2 id="pinTitle">PIN</h2>
+    <p id="pinHint" class="small"></p>
+    <div class="field"><label for="pinInput" class="small">PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off"></div>
+    <div class="btn-grid two">
+      <button type="button" class="tool pill" id="pinCancel">Batal</button>
+      <button type="submit" class="tool pink">OK</button>
+    </div>
+  </form>
+</div>
+
+<div class="pop" id="recapPop" role="dialog" aria-modal="true">
+  <div class="pop-card">
+    <h2>Rekap bulanan siap!</h2>
+    <p id="popText"></p>
+    <div class="btn-grid two">
+      <button type="button" class="tool pill" id="popLater">Nanti</button>
+      <button type="button" class="tool pink" id="popView">Lihat rekap</button>
+    </div>
+  </div>
+</div>
+
+<button type="button" class="fab" id="musicFab" aria-pressed="false">♪ Musik Off</button>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
