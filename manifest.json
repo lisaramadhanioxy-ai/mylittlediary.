@@ -1,0 +1,17 @@
+{
+  "name": "My Little Diary",
+  "short_name": "My Diary",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fce7f3",
+  "theme_color": "#fce7f3",
+  "icons": [
+    {
+      "src": "./Icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
