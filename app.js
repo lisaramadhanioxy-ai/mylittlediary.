@@ -1,6 +1,5 @@
 "use strict";
 
-
 const $ = id => document.getElementById(id);
 const today = () => {
   const d = new Date();
@@ -24,735 +23,260 @@ let lastTime = 0;
 
 function emptyState(){return {entries:[],memories:[],letter:"",lastMood:"Calm",recapSeen:{}};}
 
-/* ---------- API & OTENTIKASI (semua data tersimpan di server, terikat ke akun) ---------- */
-class ApiError extends Error{constructor(status,msg){super(msg);this.status=status;}}
-async function api(method,url,body){
-  let res;
-  try{
-    res=await fetch(url,{method,credentials:"same-origin",
-      headers:{"Content-Type":"application/json","X-Requested-With":"mld"},
-      body:body===undefined?undefined:JSON.stringify(body)});
-  }catch{throw new ApiError(0,"Tidak bisa terhubung ke server.");}
-  let data=null;try{data=await res.json();}catch{}
-  if(res.status===401&&authed){sessionEnded();throw new ApiError(401,"Sesi berakhir.");}
-  if(res.status===423){applyLock(true);throw new ApiError(423,"Diary terkunci.");}
-  if(!res.ok)throw new ApiError(res.status,(data&&data.error)||"Terjadi kesalahan.");
-  return data;
-}
-function saveSettings(patch){api("PUT","/api/settings",patch).catch(()=>{});}
-function wipeData(){
-  state=emptyState();selectedMood="Calm";
-  ["entries","memoryList","recapPoster","gardenGrid","mainFlower"].forEach(id=>{$(id).innerHTML="";});
-  $("diaryForm").reset();
-  ["quickThought","memoryText","futureLetter","searchEntries"].forEach(id=>{$(id).value="";});
-  ["saveStatus","letterStatus","recapStatus","memoryStatus"].forEach(id=>{$(id).textContent="";});
-  $("recapPop").classList.remove("show");
-}
-function showAuth(msg){
-  authed=false;unlocked=true;hasPin=false;
-  document.body.classList.remove("authed");
-  $("userbar").classList.add("hidden");
-  wipeData();
-  ["diary-section","garden-section","recap-section","memoryPrivate"].forEach(id=>$(id).classList.remove("hidden"));
-  $("privacyStatus").textContent="";
-  setAuthMode("login");
-  $("authPass").value="";$("authMsg").textContent=msg||"";
-}
-function sessionEnded(){showAuth("Sesi berakhir. Silakan masuk lagi.");}
-async function loadData(){
-  const d=await api("GET","/api/data");
-  state={entries:d.entries,memories:d.memories,letter:d.letter||"",lastMood:d.lastMood||"Calm",recapSeen:d.recapSeen||{}};
-  selectedMood=state.lastMood;
-  $("futureLetter").value=state.letter;$("entryDate").value=today();
-  renderMoods();renderEntries();renderGarden();renderMemories();fillRecapMonths();checkMonthlyRecap();
-}
-function applyLock(locked,silent){
-  unlocked=!locked;
-  ["diary-section","garden-section","recap-section","memoryPrivate"].forEach(id=>$(id).classList.toggle("hidden",locked));
-  if(locked){wipeData();renderMoods();go("memory-section");}
-  if(!silent)$("privacyStatus").textContent=locked
-    ?"Diary dikunci. Data dikosongkan dari layar dan tidak akan dikirim server sebelum PIN benar."
-    :"Diary dibuka kembali.";
-}
-async function enterApp(me){
-  authed=true;hasPin=!!me.hasPin;
-  $("userName").textContent=me.user.name;
-  $("userbar").classList.remove("hidden");
-  document.body.classList.add("authed");
-  document.querySelectorAll(".page").forEach(s=>s.classList.toggle("show",s.id==="home"));
-  document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.go==="home"));
-  if(me.locked){applyLock(true,true);$("privacyStatus").textContent="Diary terkunci. Masukkan PIN lewat tombol Unlock diary.";}
-  else{applyLock(false,true);await loadData();}
-}
-
-/* ---------- LOGIN & REGISTER ---------- */
-
-let authMode = "login";
-
-function setAuthMode(mode) {
-  authMode = mode;
-
-  $("tabLogin").classList.toggle("active", mode === "login");
-  $("tabRegister").classList.toggle("active", mode === "register");
-
-  $("nameField").classList.toggle("hidden", mode !== "register");
-
-  $("authTitle").textContent =
-    mode === "login" ? "Masuk" : "Buat akun";
-
-  $("authSubmit").textContent =
-    mode === "login" ? "Masuk" : "Daftar & mulai";
-
-  $("authPass").autocomplete =
-    mode === "login" ? "current-password" : "new-password";
-
-  $("authUser").autocomplete =
-    mode === "login" ? "username" : "username";
-
-  $("authMsg").textContent = "";
-
-  $("authPass").setCustomValidity("");
-}
-
-$("tabLogin").addEventListener("click", () => {
-  setAuthMode("login");
-});
-
-$("tabRegister").addEventListener("click", () => {
-  setAuthMode("register");
-});
-
-$("authForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const username = $("authUser").value.trim().toLowerCase();
-  const password = $("authPass").value;
-  const name = $("authName").value.trim();
-
-  $("authMsg").textContent = "";
-
-  if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
-    $("authMsg").textContent =
-      "Username harus 3–30 karakter dan hanya boleh berisi huruf kecil, angka, titik, strip, atau garis bawah.";
-    $("authUser").focus();
-    return;
-  }
-
-  if (password.length < 8 || password.length > 128) {
-    $("authMsg").textContent =
-      "Password harus terdiri dari 8–128 karakter.";
-    $("authPass").focus();
-    return;
-  }
-
-  if (authMode === "register" && name.length > 40) {
-    $("authMsg").textContent =
-      "Nama panggilan maksimal 40 karakter.";
-    $("authName").focus();
-    return;
-  }
-
-  const submitButton = $("authSubmit");
-  submitButton.disabled = true;
-
-  const originalText =
-    authMode === "login" ? "Masuk" : "Daftar & mulai";
-
-  submitButton.textContent =
-    authMode === "login" ? "Memeriksa akun..." : "Membuat akun...";
-
-  try {
-    const payload = { username, password };
-
-    if (authMode === "register") {
-      payload.name = name;
-    }
-
-    const endpoint =
-      authMode === "login" ? "/api/login" : "/api/register";
-
-    const response = await api("POST", endpoint, payload);
-
-    $("authPass").value = "";
-
-    await enterApp(response);
-  } catch (error) {
-    $("authMsg").textContent =
-      error?.message || "Terjadi kesalahan. Silakan coba lagi.";
-  } finally {
-    submitButton.disabled = false;
-// ========================================
-// SUPABASE AUTHENTICATION
-// ========================================
-
-// Isi dengan data dari Supabase Dashboard
-const SUPABASE_URL = "https://seidxxrzxjjjhrafscga.supabase.co/rest/v1/";
-const SUPABASE_ANON_KEY = "Msb_publishable_4YajoLeQeqNMs9zwkXvxQA_fPMfVnfm";
-
-// Memerlukan Supabase JS v2 yang dimuat di HTML
-// Sebelum app.js:
-// <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
-
-let authMode = "login";
-
-function setAuthMode(mode) {
-  authMode = mode;
-
-  $("tabLogin").classList.toggle("active", mode === "login");
-  $("tabRegister").classList.toggle("active", mode === "register");
-
-  $("nameField").classList.toggle("hidden", mode !== "register");
-
-  $("authTitle").textContent =
-    mode === "login" ? "Masuk" : "Buat akun";
-
-  $("authSubmit").textContent =
-    mode === "login" ? "Masuk" : "Daftar & mulai";
-
-  $("authPass").autocomplete =
-    mode === "login" ? "current-password" : "new-password";
-
-  $("authEmail").autocomplete = "email";
-
-  $("authMsg").textContent = "";
-  $("authPass").setCustomValidity("");
-}
-
-$("tabLogin").addEventListener("click", () => {
-  setAuthMode("login");
-});
-
-$("tabRegister").addEventListener("click", () => {
-  setAuthMode("register");
-});
-
-$("authForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const email = $("authEmail").value.trim().toLowerCase();
-  const password = $("authPass").value;
-  const name = $("authName").value.trim();
-
-  $("authMsg").textContent = "";
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    $("authMsg").textContent = "Masukkan alamat email yang valid.";
-    $("authEmail").focus();
-    return;
-  }
-
-  if (password.length < 8 || password.length > 128) {
-    $("authMsg").textContent =
-      "Password harus terdiri dari 8–128 karakter.";
-    $("authPass").focus();
-    return;
-  }
-
-  if (authMode === "register" && name.length > 40) {
-    $("authMsg").textContent =
-      "Nama panggilan maksimal 40 karakter.";
-    $("authName").focus();
-    return;
-  }
-
-  const submitButton = $("authSubmit");
-  const originalText =
-    authMode === "login" ? "Masuk" : "Daftar & mulai";
-
-  submitButton.disabled = true;
-  submitButton.textContent =
-    authMode === "login" ? "Memeriksa akun..." : "Membuat akun...";
-
-  try {
-    if (authMode === "register") {
-      const { data, error } =
-        await supabaseClient.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo:
-              "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
-            data: {
-              display_name: name
-            }
-          }
-        });
-
-      if (error) throw error;
-
-      $("authPass").value = "";
-
-      if (data.user && !data.session) {
-        $("authMsg").textContent =
-          "Pendaftaran berhasil. Periksa email kamu dan klik tautan verifikasi sebelum masuk.";
-        return;
-      }
-
-      if (data.session) {
-        $("authMsg").textContent =
-          "Akun berhasil dibuat dan kamu sudah masuk.";
-        await enterApp(data);
-      }
-
-    } else {
-      const { data, error } =
-        await supabaseClient.auth.signInWithPassword({
-          email,
-          password
-        });
-
-      if (error) throw error;
-
-      $("authPass").value = "";
-      await enterApp(data);
-    }
-
-  } catch (error) {
-    console.error("Authentication error:", error);
-
-    $("authMsg").textContent =
-      error?.message ||
-      "Terjadi kesalahan. Silakan coba lagi.";
-
-  } finally {
-    submitButton.disabled = false;
-    submitButton.textContent = originalText;
-  }
-});
-
-$("logoutBtn").addEventListener("click", async () => {
-// ============================================================
-// SUPABASE AUTHENTICATION — LOGIN & DAFTAR
-// ============================================================
-
+/* ---------- SUPABASE ---------- */
 const SUPABASE_URL = "https://seidxxrzxjjjhrafscga.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_4YajoLeQeqNMs9zwkXvxQA_fPMfVnfm";
 
 if (!window.supabase) {
-  throw new Error(
-    "Supabase belum dimuat. Pastikan library Supabase JS dimuat sebelum app.js."
-  );
+  document.addEventListener("DOMContentLoaded", () => {
+    const m = document.getElementById("authMsg");
+    if (m) m.textContent = "Library Supabase belum dimuat. Cek tag <script> di index.html.";
+  });
+  throw new Error("Supabase JS belum dimuat sebelum app.js");
+}
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null, pinHash = null, diaryLocked = false;
+
+class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+const fail = error => { if (error) throw new ApiError(500, error.message || "Terjadi kesalahan."); };
+
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("mld:" + currentUser.id + ":" + pin));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function upsertSettings(patch) {
+  const { error } = await sb.from("settings").upsert({ user_id: currentUser.id, ...patch }, { onConflict: "user_id" });
+  fail(error);
 }
 
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+/* api() meniru endpoint lama, tapi memakai Supabase */
+async function api(method, url, body) {
+  if (!currentUser) throw new ApiError(401, "Sesi berakhir.");
+  const uid = currentUser.id;
+  if (diaryLocked && url !== "/api/unlock") { applyLock(true); throw new ApiError(423, "Diary terkunci."); }
+  const id = decodeURIComponent(url.split("/").pop());
 
-let authMode = "login";
-let authBusy = false;
-
-// ------------------------------------------------------------
-// ELEMEN HTML
-// ------------------------------------------------------------
-
-const $ = (id) => document.getElementById(id);
-
-const authForm = $("authForm");
-const authEmail = $("authEmail");
-const authPass = $("authPass");
-const authName = $("authName");
-const authMsg = $("authMsg");
-const authSubmit = $("authSubmit");
-const authTitle = $("authTitle");
-const nameField = $("nameField");
-const tabLogin = $("tabLogin");
-const tabRegister = $("tabRegister");
-const logoutBtn = $("logoutBtn");
-
-// ------------------------------------------------------------
-// PESAN AUTENTIKASI
-// ------------------------------------------------------------
-
-function showAuthMessage(message, isError = true) {
-  if (!authMsg) return;
-
-  authMsg.textContent = message;
-  authMsg.style.color = isError ? "#c0395b" : "#27845c";
-}
-
-function setAuthBusy(busy) {
-  authBusy = busy;
-
-  if (authSubmit) {
-    authSubmit.disabled = busy;
-    authSubmit.textContent = busy
-      ? "Mohon tunggu..."
-      : authMode === "login"
-        ? "Masuk"
-        : "Daftar & mulai";
+  if (method === "GET" && url === "/api/data") {
+    const [e, m, s] = await Promise.all([
+      sb.from("entries").select("*").order("date", { ascending: false }),
+      sb.from("memories").select("*").order("created_at", { ascending: true }),
+      sb.from("settings").select("*").maybeSingle()
+    ]);
+    fail(e.error); fail(m.error); fail(s.error);
+    return { entries: e.data, memories: m.data, letter: s.data?.letter || "",
+             lastMood: s.data?.last_mood || "Calm", recapSeen: s.data?.recap_seen || {} };
   }
+  if (method === "POST" && url === "/api/entries") {
+    const row = { user_id: uid, date: body.date, title: body.title, mood: body.mood,
+                  body: body.body, gratitude: body.gratitude || "", song: body.song || "" };
+    const { data, error } = await sb.from("entries").upsert(row, { onConflict: "user_id,date" }).select().single();
+    fail(error); return { entry: data };
+  }
+  if (method === "DELETE" && url.startsWith("/api/entries/")) {
+    const { error } = await sb.from("entries").delete().eq("id", id); fail(error); return {};
+  }
+  if (method === "POST" && url === "/api/memories") {
+    const { data, error } = await sb.from("memories").insert({ user_id: uid, text: body.text, date: body.date }).select().single();
+    fail(error); return { memory: data };
+  }
+  if (method === "DELETE" && url.startsWith("/api/memories/")) {
+    const { error } = await sb.from("memories").delete().eq("id", id); fail(error); return {};
+  }
+  if (method === "PUT" && url === "/api/settings") {
+    const p = {};
+    if (body.lastMood !== undefined) p.last_mood = body.lastMood;
+    if (body.letter !== undefined) p.letter = body.letter;
+    await upsertSettings(p); return {};
+  }
+  if (method === "POST" && url === "/api/recap-seen") {
+    await upsertSettings({ recap_seen: state.recapSeen }); return {};
+  }
+  if (method === "POST" && url === "/api/pin") {
+    if (!/^\d{4,8}$/.test(String(body.pin || ""))) throw new ApiError(400, "PIN harus 4-8 digit angka.");
+    if (pinHash && (await hashPin(body.current || "")) !== pinHash) throw new ApiError(403, "PIN lama salah.");
+    const h = await hashPin(body.pin);
+    await upsertSettings({ pin_hash: h }); pinHash = h; return {};
+  }
+  if (method === "POST" && url === "/api/lock") { diaryLocked = true; return {}; }
+  if (method === "POST" && url === "/api/unlock") {
+    if (!pinHash || (await hashPin(String(body.pin || ""))) !== pinHash) throw new ApiError(403, "PIN salah.");
+    diaryLocked = false; return {};
+  }
+  if (method === "GET" && url === "/api/export") {
+    const d = await api("GET", "/api/data");
+    return { app: "my-little-diary", version: 1, ...d };
+  }
+  if (method === "POST" && url === "/api/import") {
+    const okMood = x => moods.some(m => m.id === x) ? x : "Calm";
+    const byDate = new Map();
+    (Array.isArray(body.entries) ? body.entries : []).forEach(x => {
+      if (x && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && x.title && x.body)
+        byDate.set(x.date, { user_id: uid, date: x.date, title: String(x.title).slice(0, 200), mood: okMood(x.mood),
+          body: String(x.body), gratitude: String(x.gratitude || ""), song: String(x.song || "") });
+    });
+    const mems = (Array.isArray(body.memories) ? body.memories : []).filter(x => x && x.text)
+      .map(x => ({ user_id: uid, text: String(x.text), date: /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? x.date : today() }));
+    const ents = [...byDate.values()];
+    const skipped = (body.entries?.length || 0) - ents.length + (body.memories?.length || 0) - mems.length;
+    let r = await sb.from("entries").delete().eq("user_id", uid); fail(r.error);
+    r = await sb.from("memories").delete().eq("user_id", uid); fail(r.error);
+    if (ents.length) { r = await sb.from("entries").insert(ents); fail(r.error); }
+    if (mems.length) { r = await sb.from("memories").insert(mems); fail(r.error); }
+    if (body.letter !== undefined) await upsertSettings({ letter: String(body.letter) });
+    return { imported: { entries: ents.length, memories: mems.length }, skipped: Math.max(0, skipped) };
+  }
+  throw new ApiError(404, "Endpoint tidak dikenal.");
+}
+function saveSettings(patch) { api("PUT", "/api/settings", patch).catch(() => {}); }
 
-  if (tabLogin) tabLogin.disabled = busy;
-  if (tabRegister) tabRegister.disabled = busy;
+function wipeData() {
+  state = emptyState(); selectedMood = "Calm";
+  ["entries", "memoryList", "recapPoster", "gardenGrid", "mainFlower"].forEach(id => { $(id).innerHTML = ""; });
+  $("diaryForm").reset();
+  ["quickThought", "memoryText", "futureLetter", "searchEntries"].forEach(id => { $(id).value = ""; });
+  ["saveStatus", "letterStatus", "recapStatus", "memoryStatus"].forEach(id => { $(id).textContent = ""; });
+  $("recapPop").classList.remove("show");
+}
+function showAuth(msg) {
+  authed = false; unlocked = true; hasPin = false;
+  currentUser = null; pinHash = null; diaryLocked = false;
+  document.body.classList.remove("authed");
+  $("userbar").classList.add("hidden");
+  wipeData();
+  ["diary-section", "garden-section", "recap-section", "memoryPrivate"].forEach(id => $(id).classList.remove("hidden"));
+  $("privacyStatus").textContent = "";
+  setAuthMode("login");
+  $("authPass").value = ""; $("authMsg").textContent = msg || "";
+}
+function sessionEnded() { showAuth("Sesi berakhir. Silakan masuk lagi."); }
+async function loadData() {
+  const d = await api("GET", "/api/data");
+  state = { entries: d.entries, memories: d.memories, letter: d.letter || "", lastMood: d.lastMood || "Calm", recapSeen: d.recapSeen || {} };
+  selectedMood = state.lastMood;
+  $("futureLetter").value = state.letter; $("entryDate").value = today();
+  renderMoods(); renderEntries(); renderGarden(); renderMemories(); fillRecapMonths(); checkMonthlyRecap();
+}
+function applyLock(locked, silent) {
+  unlocked = !locked;
+  ["diary-section", "garden-section", "recap-section", "memoryPrivate"].forEach(id => $(id).classList.toggle("hidden", locked));
+  if (locked) { wipeData(); renderMoods(); go("memory-section"); }
+  if (!silent) $("privacyStatus").textContent = locked
+    ? "Diary dikunci. Data dikosongkan dari layar dan tidak akan dikirim server sebelum PIN benar."
+    : "Diary dibuka kembali.";
+}
+async function buildMe(user) {
+  currentUser = user;
+  const { data, error } = await sb.from("settings").select("pin_hash").maybeSingle();
+  fail(error);
+  pinHash = data?.pin_hash || null;
+  diaryLocked = !!pinHash;
+  return { user: { name: user.user_metadata?.display_name || (user.email || "").split("@")[0] || "Teman" },
+           hasPin: !!pinHash, locked: diaryLocked };
+}
+async function enterApp(me) {
+  authed = true; hasPin = !!me.hasPin;
+  $("userName").textContent = me.user.name;
+  $("userbar").classList.remove("hidden");
+  document.body.classList.add("authed");
+  document.querySelectorAll(".page").forEach(s => s.classList.toggle("show", s.id === "home"));
+  document.querySelectorAll(".nav button").forEach(b => b.classList.toggle("active", b.dataset.go === "home"));
+  if (me.locked) { applyLock(true, true); $("privacyStatus").textContent = "Diary terkunci. Masukkan PIN lewat tombol Unlock diary."; }
+  else { applyLock(false, true); await loadData(); }
 }
 
-// ------------------------------------------------------------
-// PINDAH TAB LOGIN / DAFTAR
-// ------------------------------------------------------------
+/* ---------- LOGIN & DAFTAR ---------- */
+let authMode = "login", authBusy = false;
 
+function showAuthMessage(msg, isError = true) {
+  $("authMsg").textContent = msg;
+  $("authMsg").style.color = isError ? "#c0395b" : "#27845c";
+}
 function setAuthMode(mode) {
-  if (authBusy) return;
-
   authMode = mode === "register" ? "register" : "login";
-
-  if (tabLogin) {
-    tabLogin.classList.toggle("active", authMode === "login");
-  }
-
-  if (tabRegister) {
-    tabRegister.classList.toggle("active", authMode === "register");
-  }
-
-  if (nameField) {
-    nameField.classList.toggle("hidden", authMode !== "register");
-  }
-
-  if (authTitle) {
-    authTitle.textContent =
-      authMode === "login" ? "Masuk" : "Buat akun";
-  }
-
-  if (authSubmit) {
-    authSubmit.textContent =
-      authMode === "login" ? "Masuk" : "Daftar & mulai";
-  }
-
-  if (authPass) {
-    authPass.autocomplete =
-      authMode === "login" ? "current-password" : "new-password";
-    authPass.setCustomValidity("");
-  }
-
-  if (authEmail) {
-    authEmail.autocomplete = "email";
-  }
-
-  showAuthMessage("", false);
+  $("tabLogin").classList.toggle("active", authMode === "login");
+  $("tabRegister").classList.toggle("active", authMode === "register");
+  $("nameField").classList.toggle("hidden", authMode !== "register");
+  $("authTitle").textContent = authMode === "login" ? "Masuk" : "Buat akun";
+  $("authSubmit").textContent = authMode === "login" ? "Masuk" : "Daftar & mulai";
+  $("authPass").autocomplete = authMode === "login" ? "current-password" : "new-password";
+  $("authEmail").autocomplete = "email";
+  $("authMsg").textContent = "";
 }
-
-if (tabLogin) {
-  tabLogin.addEventListener("click", () => setAuthMode("login"));
-}
-
-if (tabRegister) {
-  tabRegister.addEventListener("click", () => setAuthMode("register"));
-}
-
-// ------------------------------------------------------------
-// VALIDASI INPUT
-// ------------------------------------------------------------
-
-function validateAuthInput(email, password, name) {
-  if (!email) {
-    return "Masukkan alamat email kamu.";
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return "Format email belum benar.";
-  }
-
-  if (!password) {
-    return "Masukkan kata sandi kamu.";
-  }
-
-  if (password.length < 8) {
-    return "Kata sandi minimal 8 karakter.";
-  }
-
-  if (password.length > 128) {
-    return "Kata sandi maksimal 128 karakter.";
-  }
-
-  if (authMode === "register") {
-    if (!name) {
-      return "Masukkan nama kamu.";
-    }
-
-    if (name.length > 40) {
-      return "Nama maksimal 40 karakter.";
-    }
-  }
-
-  return null;
-}
-
-// ------------------------------------------------------------
-// TERJEMAHAN PESAN ERROR SUPABASE
-// ------------------------------------------------------------
-
-function getAuthErrorMessage(error) {
-  const message = String(error?.message || "").toLowerCase();
-
-  if (message.includes("invalid login credentials")) {
-    return "Email atau kata sandi salah.";
-  }
-
-  if (message.includes("user already registered")) {
-    return "Email ini sudah terdaftar. Silakan masuk.";
-  }
-
-  if (
-    message.includes("password should be at least") ||
-    message.includes("weak password")
-  ) {
-    return "Kata sandi terlalu lemah. Gunakan minimal 8 karakter.";
-  }
-
-  if (
-    message.includes("email not confirmed") ||
-    message.includes("email confirmation")
-  ) {
-    return "Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.";
-  }
-
-  if (
-    message.includes("rate limit") ||
-    message.includes("too many requests")
-  ) {
-    return "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.";
-  }
-
-  if (
-    message.includes("failed to fetch") ||
-    message.includes("network")
-  ) {
-    return "Koneksi gagal. Periksa internet dan konfigurasi Supabase.";
-  }
-
+function authErrorText(error) {
+  const m = String(error?.message || "").toLowerCase();
+  if (m.includes("invalid login credentials")) return "Email atau kata sandi salah.";
+  if (m.includes("already registered")) return "Email ini sudah terdaftar. Silakan masuk.";
+  if (m.includes("email not confirmed")) return "Email belum diverifikasi. Cek inbox/spam kamu dulu.";
+  if (m.includes("password should be") || m.includes("weak password")) return "Kata sandi terlalu lemah. Gunakan minimal 8 karakter.";
+  if (m.includes("rate limit") || m.includes("too many")) return "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.";
+  if (m.includes("failed to fetch") || m.includes("network")) return "Koneksi gagal. Periksa internet kamu.";
   return error?.message || "Terjadi kesalahan. Silakan coba lagi.";
 }
+$("tabLogin").addEventListener("click", () => { if (!authBusy) setAuthMode("login"); });
+$("tabRegister").addEventListener("click", () => { if (!authBusy) setAuthMode("register"); });
 
-// ------------------------------------------------------------
-// LOGIN DAN DAFTAR
-// ------------------------------------------------------------
+$("authForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (authBusy) return;
+  const email = $("authEmail").value.trim().toLowerCase();
+  const password = $("authPass").value;
+  const name = $("authName").value.trim();
 
-if (authForm) {
-  authForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showAuthMessage("Masukkan alamat email yang valid.");
+  if (password.length < 8 || password.length > 128) return showAuthMessage("Kata sandi harus 8–128 karakter.");
+  if (authMode === "register" && name.length > 40) return showAuthMessage("Nama panggilan maksimal 40 karakter.");
 
-    if (authBusy) return;
-
-    const email = authEmail?.value.trim().toLowerCase() || "";
-    const password = authPass?.value || "";
-    const name = authName?.value.trim() || "";
-
-    const validationError = validateAuthInput(
-      email,
-      password,
-      name
-    );
-
-    if (validationError) {
-      showAuthMessage(validationError);
-      return;
-    }
-
-    setAuthBusy(true);
-    showAuthMessage("", false);
-
-    try {
-      if (authMode === "register") {
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo:
-              "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
-            data: {
-              display_name: name
-            }
-          }
-        });
-
-        if (error) throw error;
-
-        if (data.session && data.user) {
-          showAuthMessage("Pendaftaran berhasil! Membuka diary...", false);
-
-          if (typeof enterApp === "function") {
-            await enterApp({
-              user: data.user,
-              session: data.session
-            });
-          }
-        } else {
-          showAuthMessage(
-            "Pendaftaran berhasil! Periksa email untuk konfirmasi akun sebelum masuk.",
-            false
-          );
-
-          if (authPass) authPass.value = "";
-          setAuthMode("login");
-        }
-      } else {
-        const { data, error } =
-          await supabaseClient.auth.signInWithPassword({
-            email,
-            password
-          });
-
-        if (error) throw error;
-
-        if (!data.user || !data.session) {
-          throw new Error("Login belum berhasil. Silakan coba lagi.");
-        }
-
-        showAuthMessage("Login berhasil! Membuka diary...", false);
-
-        if (typeof enterApp === "function") {
-          await enterApp({
-            user: data.user,
-            session: data.session
-          });
-        } else {
-          throw new Error(
-            "Fungsi enterApp tidak ditemukan. Periksa kode aplikasi utama."
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Supabase authentication error:", error);
-      showAuthMessage(getAuthErrorMessage(error));
-    } finally {
-      setAuthBusy(false);
-    }
-  });
-}
-
-// ------------------------------------------------------------
-// LOGOUT
-// ------------------------------------------------------------
-
-if (logoutBtn) {
-  logoutBtn.addEventListener("click", async () => {
-    if (authBusy) return;
-
-    setAuthBusy(true);
-
-    try {
-      const { error } = await supabaseClient.auth.signOut();
-
-      if (error) throw error;
-
-      if (typeof showAuth === "function") {
-        showAuth("Kamu berhasil keluar.");
-      }
-    } catch (error) {
-      console.error("Supabase logout error:", error);
-      showAuthMessage(getAuthErrorMessage(error));
-    } finally {
-      setAuthBusy(false);
-    }
-  });
-}
-
-// ------------------------------------------------------------
-// MEMULIHKAN SESI LOGIN
-// ------------------------------------------------------------
-
-async function restoreSupabaseSession() {
+  authBusy = true;
+  const btn = $("authSubmit"), label = authMode === "login" ? "Masuk" : "Daftar & mulai";
+  btn.disabled = true; btn.textContent = "Mohon tunggu...";
+  showAuthMessage("", false);
   try {
-    const { data, error } = await supabaseClient.auth.getSession();
-
-    if (error) throw error;
-
-    if (data.session && data.session.user) {
-      if (typeof enterApp === "function") {
-        await enterApp({
-          user: data.session.user,
-          session: data.session
-        });
+    let result;
+    if (authMode === "register") {
+      result = await sb.auth.signUp({ email, password, options: {
+        emailRedirectTo: "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
+        data: { display_name: name || email.split("@")[0] } } });
+      if (result.error) throw result.error;
+      if (!result.data.session) {
+        $("authPass").value = "";
+        showAuthMessage("Pendaftaran berhasil! Cek email kamu dan klik tautan verifikasi, lalu masuk.", false);
+        return;
       }
-    } else if (typeof showAuth === "function") {
-      showAuth();
+    } else {
+      result = await sb.auth.signInWithPassword({ email, password });
+      if (result.error) throw result.error;
     }
+    $("authPass").value = "";
+    await enterApp(await buildMe(result.data.user));
   } catch (error) {
-    console.error("Session restoration error:", error);
-
-    if (typeof showAuth === "function") {
-      showAuth("Gagal memulihkan sesi. Silakan masuk kembali.");
-    }
-  }
-}
-
-// ------------------------------------------------------------
-// PERUBAHAN STATUS AUTENTIKASI
-// ------------------------------------------------------------
-
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_OUT") {
-    if (typeof showAuth === "function") {
-      showAuth();
-    }
+    console.error("Auth error:", error);
+    showAuthMessage(authErrorText(error));
+  } finally {
+    authBusy = false; btn.disabled = false; btn.textContent = label;
   }
 });
 
-// ------------------------------------------------------------
-// INISIALISASI
-// ------------------------------------------------------------
-
-setAuthMode("login");
-restoreSupabaseSession();
-
-// ============================================================
-// AKHIR SUPABASE AUTHENTICATION
-// ============================================================
-
-// Memulihkan sesi login saat halaman dibuka kembali
-async function restoreSupabaseSession() {
-  try {
-    const { data, error } =
-      await supabaseClient.auth.getSession();
-
-    if (error) throw error;
-
-    if (data.session) {
-      await enterApp({
-        user: data.session.user,
-        session: data.session
-      });
-    }
-  } catch (error) {
-    console.error("Session restore error:", error);
-  }
-}
-
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_OUT") {
-    showAuth("Silakan masuk kembali ke diary kamu.");
-  }
+$("logoutBtn").addEventListener("click", async () => {
+  try { await sb.auth.signOut(); } catch (e) { console.error(e); }
+  showAuth("Kamu berhasil keluar.");
+});
+sb.auth.onAuthStateChange(event => {
+  if (event === "SIGNED_OUT" && authed) showAuth("Sesi berakhir. Silakan masuk lagi.");
 });
 
-// Pertahankan fungsi PIN milik aplikasi
+/* ---------- PIN ---------- */
 function askSecret(title, hint) {
   return new Promise(resolve => {
     $("pinTitle").textContent = title;
     $("pinHint").textContent = hint;
     $("pinInput").value = "";
-
     $("pinPop").classList.add("show");
     $("pinInput").focus();
-
-    const done = value => {
-      $("pinPop").classList.remove("show");
-      $("pinInput").value = "";
-      resolve(value);
-    };
-
-    $("pinForm").onsubmit = event => {
-      event.preventDefault();
-      done($("pinInput").value);
-    };
-
+    const done = value => { $("pinPop").classList.remove("show"); $("pinInput").value = ""; resolve(value); };
+    $("pinForm").onsubmit = e => { e.preventDefault(); done($("pinInput").value); };
     $("pinCancel").onclick = () => done(null);
   });
-             }
+}
 
 /* ---------- NAVIGASI: satu halaman per menu ---------- */
 function go(id){
@@ -1370,11 +894,8 @@ function needUnlock(){
 $("exportBtn").addEventListener("click",async()=>{
  if(needUnlock())return;
  try{
-  const res=await fetch("/api/export",{credentials:"same-origin"});
-  if(res.status===401){sessionEnded();return;}
-  if(res.status===423){applyLock(true);return;}
-  if(!res.ok)throw new Error();
-  saveBlob(await res.blob(),"my-little-diary-backup.json");
+  const data=await api("GET","/api/export");
+  saveBlob(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),"my-little-diary-backup.json");
   $("privacyStatus").textContent="Backup diunduh.";
  }catch{$("privacyStatus").textContent="Gagal mengunduh backup.";}
 });
@@ -1393,7 +914,7 @@ $("importFile").addEventListener("change",async e=>{
  e.target.value="";
 });
 
-/* ---------- KUNCI DIARY (PIN diverifikasi di server) ---------- */
+/* ---------- KUNCI DIARY (PIN) ---------- */
 $("pinBtn").addEventListener("click",async()=>{
  if(needUnlock())return;
  let current;
@@ -1710,12 +1231,6 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkMonth
 renderMoods();
 updateMusicUI();
 setAuthMode("login");
-(async function boot(){
- try{
-  const me=await api("GET","/api/me");
-  if(me.authenticated)await enterApp(me);else showAuth("");
- }catch(err){showAuth(err.message);}
-})();
 
 // Hewan dibuat di atas lantai; posisi dirapikan saat halaman Little Room dibuka (fitRoom).
 makePet("cat","Mochi",20,0);
@@ -1724,3 +1239,13 @@ makePet("raccoon","Ruru",240,0);
 
 window.addEventListener("resize",fitRoom);
 requestAnimationFrame(animationLoop);
+
+/* Pulihkan sesi login (Supabase) saat halaman dibuka */
+(async function boot(){
+ try{
+  const { data, error } = await sb.auth.getSession();
+  if(error) throw error;
+  if(data.session) await enterApp(await buildMe(data.session.user));
+  else showAuth("");
+ }catch(err){showAuth(err.message);}
+})();
