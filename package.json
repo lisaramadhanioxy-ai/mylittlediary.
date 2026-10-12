@@ -1,0 +1,12 @@
+{
+  "name": "my-little-diary",
+  "version": "2.0.0",
+  "description": "My Little Diary dengan akun pengguna dan isolasi data per user_id",
+  "private": true,
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/isolation.test.js"
+  }
+}
