@@ -326,29 +326,383 @@ $("authForm").addEventListener("submit", async (event) => {
 });
 
 $("logoutBtn").addEventListener("click", async () => {
-  const button = $("logoutBtn");
-  button.disabled = true;
+// ============================================================
+// SUPABASE AUTHENTICATION — LOGIN & DAFTAR
+// ============================================================
 
+const SUPABASE_URL = "https://seidxxrzxjjjhrafscga.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_4YajoLeQeqNMs9zwkXvxQA_fPMfVnfm";
+
+if (!window.supabase) {
+  throw new Error(
+    "Supabase belum dimuat. Pastikan library Supabase JS dimuat sebelum app.js."
+  );
+}
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+let authMode = "login";
+let authBusy = false;
+
+// ------------------------------------------------------------
+// ELEMEN HTML
+// ------------------------------------------------------------
+
+const $ = (id) => document.getElementById(id);
+
+const authForm = $("authForm");
+const authEmail = $("authEmail");
+const authPass = $("authPass");
+const authName = $("authName");
+const authMsg = $("authMsg");
+const authSubmit = $("authSubmit");
+const authTitle = $("authTitle");
+const nameField = $("nameField");
+const tabLogin = $("tabLogin");
+const tabRegister = $("tabRegister");
+const logoutBtn = $("logoutBtn");
+
+// ------------------------------------------------------------
+// PESAN AUTENTIKASI
+// ------------------------------------------------------------
+
+function showAuthMessage(message, isError = true) {
+  if (!authMsg) return;
+
+  authMsg.textContent = message;
+  authMsg.style.color = isError ? "#c0395b" : "#27845c";
+}
+
+function setAuthBusy(busy) {
+  authBusy = busy;
+
+  if (authSubmit) {
+    authSubmit.disabled = busy;
+    authSubmit.textContent = busy
+      ? "Mohon tunggu..."
+      : authMode === "login"
+        ? "Masuk"
+        : "Daftar & mulai";
+  }
+
+  if (tabLogin) tabLogin.disabled = busy;
+  if (tabRegister) tabRegister.disabled = busy;
+}
+
+// ------------------------------------------------------------
+// PINDAH TAB LOGIN / DAFTAR
+// ------------------------------------------------------------
+
+function setAuthMode(mode) {
+  if (authBusy) return;
+
+  authMode = mode === "register" ? "register" : "login";
+
+  if (tabLogin) {
+    tabLogin.classList.toggle("active", authMode === "login");
+  }
+
+  if (tabRegister) {
+    tabRegister.classList.toggle("active", authMode === "register");
+  }
+
+  if (nameField) {
+    nameField.classList.toggle("hidden", authMode !== "register");
+  }
+
+  if (authTitle) {
+    authTitle.textContent =
+      authMode === "login" ? "Masuk" : "Buat akun";
+  }
+
+  if (authSubmit) {
+    authSubmit.textContent =
+      authMode === "login" ? "Masuk" : "Daftar & mulai";
+  }
+
+  if (authPass) {
+    authPass.autocomplete =
+      authMode === "login" ? "current-password" : "new-password";
+    authPass.setCustomValidity("");
+  }
+
+  if (authEmail) {
+    authEmail.autocomplete = "email";
+  }
+
+  showAuthMessage("", false);
+}
+
+if (tabLogin) {
+  tabLogin.addEventListener("click", () => setAuthMode("login"));
+}
+
+if (tabRegister) {
+  tabRegister.addEventListener("click", () => setAuthMode("register"));
+}
+
+// ------------------------------------------------------------
+// VALIDASI INPUT
+// ------------------------------------------------------------
+
+function validateAuthInput(email, password, name) {
+  if (!email) {
+    return "Masukkan alamat email kamu.";
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "Format email belum benar.";
+  }
+
+  if (!password) {
+    return "Masukkan kata sandi kamu.";
+  }
+
+  if (password.length < 8) {
+    return "Kata sandi minimal 8 karakter.";
+  }
+
+  if (password.length > 128) {
+    return "Kata sandi maksimal 128 karakter.";
+  }
+
+  if (authMode === "register") {
+    if (!name) {
+      return "Masukkan nama kamu.";
+    }
+
+    if (name.length > 40) {
+      return "Nama maksimal 40 karakter.";
+    }
+  }
+
+  return null;
+}
+
+// ------------------------------------------------------------
+// TERJEMAHAN PESAN ERROR SUPABASE
+// ------------------------------------------------------------
+
+function getAuthErrorMessage(error) {
+  const message = String(error?.message || "").toLowerCase();
+
+  if (message.includes("invalid login credentials")) {
+    return "Email atau kata sandi salah.";
+  }
+
+  if (message.includes("user already registered")) {
+    return "Email ini sudah terdaftar. Silakan masuk.";
+  }
+
+  if (
+    message.includes("password should be at least") ||
+    message.includes("weak password")
+  ) {
+    return "Kata sandi terlalu lemah. Gunakan minimal 8 karakter.";
+  }
+
+  if (
+    message.includes("email not confirmed") ||
+    message.includes("email confirmation")
+  ) {
+    return "Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.";
+  }
+
+  if (
+    message.includes("rate limit") ||
+    message.includes("too many requests")
+  ) {
+    return "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.";
+  }
+
+  if (
+    message.includes("failed to fetch") ||
+    message.includes("network")
+  ) {
+    return "Koneksi gagal. Periksa internet dan konfigurasi Supabase.";
+  }
+
+  return error?.message || "Terjadi kesalahan. Silakan coba lagi.";
+}
+
+// ------------------------------------------------------------
+// LOGIN DAN DAFTAR
+// ------------------------------------------------------------
+
+if (authForm) {
+  authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (authBusy) return;
+
+    const email = authEmail?.value.trim().toLowerCase() || "";
+    const password = authPass?.value || "";
+    const name = authName?.value.trim() || "";
+
+    const validationError = validateAuthInput(
+      email,
+      password,
+      name
+    );
+
+    if (validationError) {
+      showAuthMessage(validationError);
+      return;
+    }
+
+    setAuthBusy(true);
+    showAuthMessage("", false);
+
+    try {
+      if (authMode === "register") {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo:
+              "https://lisaramadhanioxy-ai.github.io/mylittlediary/",
+            data: {
+              display_name: name
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.session && data.user) {
+          showAuthMessage("Pendaftaran berhasil! Membuka diary...", false);
+
+          if (typeof enterApp === "function") {
+            await enterApp({
+              user: data.user,
+              session: data.session
+            });
+          }
+        } else {
+          showAuthMessage(
+            "Pendaftaran berhasil! Periksa email untuk konfirmasi akun sebelum masuk.",
+            false
+          );
+
+          if (authPass) authPass.value = "";
+          setAuthMode("login");
+        }
+      } else {
+        const { data, error } =
+          await supabaseClient.auth.signInWithPassword({
+            email,
+            password
+          });
+
+        if (error) throw error;
+
+        if (!data.user || !data.session) {
+          throw new Error("Login belum berhasil. Silakan coba lagi.");
+        }
+
+        showAuthMessage("Login berhasil! Membuka diary...", false);
+
+        if (typeof enterApp === "function") {
+          await enterApp({
+            user: data.user,
+            session: data.session
+          });
+        } else {
+          throw new Error(
+            "Fungsi enterApp tidak ditemukan. Periksa kode aplikasi utama."
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Supabase authentication error:", error);
+      showAuthMessage(getAuthErrorMessage(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  });
+}
+
+// ------------------------------------------------------------
+// LOGOUT
+// ------------------------------------------------------------
+
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    if (authBusy) return;
+
+    setAuthBusy(true);
+
+    try {
+      const { error } = await supabaseClient.auth.signOut();
+
+      if (error) throw error;
+
+      if (typeof showAuth === "function") {
+        showAuth("Kamu berhasil keluar.");
+      }
+    } catch (error) {
+      console.error("Supabase logout error:", error);
+      showAuthMessage(getAuthErrorMessage(error));
+    } finally {
+      setAuthBusy(false);
+    }
+  });
+}
+
+// ------------------------------------------------------------
+// MEMULIHKAN SESI LOGIN
+// ------------------------------------------------------------
+
+async function restoreSupabaseSession() {
   try {
-    const { error } = await supabaseClient.auth.signOut();
+    const { data, error } = await supabaseClient.auth.getSession();
 
     if (error) throw error;
 
+    if (data.session && data.session.user) {
+      if (typeof enterApp === "function") {
+        await enterApp({
+          user: data.session.user,
+          session: data.session
+        });
+      }
+    } else if (typeof showAuth === "function") {
+      showAuth();
+    }
   } catch (error) {
-    console.error("Logout error:", error);
-    $("authMsg").textContent =
-      error?.message || "Gagal keluar. Silakan coba lagi.";
+    console.error("Session restoration error:", error);
 
-  } finally {
-    $("authUser").value = "";
-    $("authEmail").value = "";
-    $("authPass").value = "";
-    $("authName").value = "";
+    if (typeof showAuth === "function") {
+      showAuth("Gagal memulihkan sesi. Silakan masuk kembali.");
+    }
+  }
+}
 
-    showAuth("Kamu sudah keluar. Sampai jumpa lagi! ♡");
-    button.disabled = false;
+// ------------------------------------------------------------
+// PERUBAHAN STATUS AUTENTIKASI
+// ------------------------------------------------------------
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_OUT") {
+    if (typeof showAuth === "function") {
+      showAuth();
+    }
   }
 });
+
+// ------------------------------------------------------------
+// INISIALISASI
+// ------------------------------------------------------------
+
+setAuthMode("login");
+restoreSupabaseSession();
+
+// ============================================================
+// AKHIR SUPABASE AUTHENTICATION
+// ============================================================
 
 // Memulihkan sesi login saat halaman dibuka kembali
 async function restoreSupabaseSession() {
